@@ -15,15 +15,20 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
-      - name: Generate Fixed Deterministic Keystore
+      - name: Cache Permanent Signing Keystore
+        id: cache-keystore
+        uses: actions/cache@v4
+        with:
+          path: app/ludoking.keystore
+          key: ludoking-permanent-keystore-v1
+      - name: Generate Signing Keystore (Only Once)
+        if: steps.cache-keystore.outputs.cache-hit != 'true'
         run: |
-          rm -f app/ludoking.keystore
           keytool -genkeypair -noprompt \
             -keystore app/ludoking.keystore \
             -alias ludoking \
             -keyalg RSA -keysize 2048 \
             -validity 10000 \
-            -startdate "2026/01/01 00:00:00" \
             -storepass LudoKing@2026 \
             -keypass LudoKing@2026 \
             -dname "CN=LudoKing, OU=Games, O=LudoStudio, L=Chattogram, ST=CTG, C=BD"

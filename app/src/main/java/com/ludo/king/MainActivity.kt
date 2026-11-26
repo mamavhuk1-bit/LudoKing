@@ -36,12 +36,12 @@ class MainActivity : AppCompatActivity() {
     private var currentScreen = "SPLASH"
     private var vsComputer = false
     private var bgMusicPlayer: MediaPlayer? = null
+    private var startSfxPlayer: MediaPlayer? = null
     private var isMusicMuted = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // স্ট্যাটাস বার ফিক্স (কালো না দেখিয়ে রয়্যাল নেভি ব্লু দেখাবে)
         window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
         window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
         window.statusBarColor = Color.parseColor("#0D1B4C")
@@ -82,6 +82,17 @@ class MainActivity : AppCompatActivity() {
         } catch (_: Exception) {}
     }
 
+    private fun playGameStartSound() {
+        if (isMusicMuted) return
+        try {
+            startSfxPlayer?.release()
+            startSfxPlayer = MediaPlayer.create(this, R.raw.start)?.apply {
+                setOnCompletionListener { it.release() }
+                start()
+            }
+        } catch (_: Exception) {}
+    }
+
     private fun toggleLobbyMute(): Boolean {
         isMusicMuted = !isMusicMuted
         SoundEngine.isMuted = isMusicMuted
@@ -89,7 +100,6 @@ class MainActivity : AppCompatActivity() {
         return isMusicMuted
     }
 
-    // হার্ডওয়্যার ব্যাক বাটন হ্যান্ডলার (ধাপে ধাপে পেছনে যাবে)
     private fun setupBackNavigation() {
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -109,7 +119,6 @@ class MainActivity : AppCompatActivity() {
         })
     }
 
-    // প্রিমিয়াম রয়্যাল কাস্টম পপ-আপ ডায়ালগ
     private fun createRoyalDialog(titleText: String): Pair<Dialog, LinearLayout> {
         val dialog = Dialog(this)
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
@@ -202,7 +211,6 @@ class MainActivity : AppCompatActivity() {
         dialog.show()
     }
 
-    // ১. স্প্ল্যাশ স্ক্রিন (open.jpg)
     private fun showSplashScreen() {
         currentScreen = "SPLASH"
         rootContainer.removeAllViews()
@@ -216,7 +224,6 @@ class MainActivity : AppCompatActivity() {
         }, 2200)
     }
 
-    // ২. হোম স্ক্রিন (homepage.jpg)
     private fun showHomeScreen() {
         currentScreen = "HOME"
         startLobbyMusic()
@@ -253,7 +260,6 @@ class MainActivity : AppCompatActivity() {
         }
         frame.addView(animOverlay, FrameLayout.LayoutParams(-1, -1))
 
-        // মিউট বাটন (উপরের ডান কোণায়)
         val muteBtn = makeMuteButton()
         frame.addView(muteBtn, FrameLayout.LayoutParams(110, 110).apply {
             gravity = Gravity.TOP or Gravity.END
@@ -283,7 +289,6 @@ class MainActivity : AppCompatActivity() {
         rootContainer.addView(frame, FrameLayout.LayoutParams(-1, -1))
     }
 
-    // ৩. মোড সিলেকশন স্ক্রিন (afterpass.jpg)
     private fun showAfterPassScreen() {
         currentScreen = "AFTER_PASS"
         rootContainer.removeAllViews()
@@ -344,7 +349,6 @@ class MainActivity : AppCompatActivity() {
         rootContainer.addView(frame, FrameLayout.LayoutParams(-1, -1))
     }
 
-    // ৪. প্লেয়ার ও কালার সেটআপ স্ক্রিন (afternext.jpg - সঠিক সবুজ রিং পজিশন ও রয়্যাল পপআপ সহ)
     private fun showAfterNextScreen() {
         currentScreen = "AFTER_NEXT"
         rootContainer.removeAllViews()
@@ -361,7 +365,6 @@ class MainActivity : AppCompatActivity() {
         val setupOverlay = object : View(this) {
             val p = Paint(Paint.ANTI_ALIAS_FLAG)
             override fun onDraw(canvas: Canvas) {
-                // afternext.jpg-এর 2P, 3P, 4P বাটনের সঠিক কেন্দ্রবিন্দু
                 val pxPositions = mapOf(2 to 0.184f, 3 to 0.340f, 4 to 0.496f)
                 val ringY = height * 0.583f
                 val ringR = width * 0.062f
@@ -376,7 +379,6 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
 
-                // বর্তমান সেট করা প্লেয়ারদের নাম সুন্দর গোল্ডেন ব্যানারে দেখানো
                 p.color = Color.parseColor("#FFD700")
                 p.textSize = 32f
                 p.textAlign = Paint.Align.CENTER
@@ -397,29 +399,22 @@ class MainActivity : AppCompatActivity() {
                 val nx = ev.x / v.width
                 val ny = ev.y / v.height
                 when {
-                    // 2P, 3P, 4P সিলেকশন
                     ny in 0.53f..0.63f && nx in 0.11f..0.25f -> { playerCount = 2; SoundEngine.playStep(); setupOverlay.invalidate() }
                     ny in 0.53f..0.63f && nx in 0.27f..0.41f -> { playerCount = 3; SoundEngine.playStep(); setupOverlay.invalidate() }
                     ny in 0.53f..0.63f && nx in 0.43f..0.57f -> { playerCount = 4; SoundEngine.playStep(); setupOverlay.invalidate() }
 
-                    // প্লেয়ার নাম এডিট বক্স এরিয়া
                     ny in 0.39f..0.52f && nx in 0.38f..0.78f -> {
                         promptRoyalEditNames(playerCount, playerNames) { setupOverlay.invalidate() }
                     }
 
-                    // Play বাটন
                     nx in 0.32f..0.68f && ny in 0.64f..0.71f -> {
-                        SoundEngine.playHomeOrSix()
                         startGame(playerCount, playerNames.take(playerCount), oneTokenOut = false)
                     }
 
-                    // Play - One Token Out বাটন
                     nx in 0.32f..0.68f && ny in 0.72f..0.81f -> {
-                        SoundEngine.playHomeOrSix()
                         startGame(playerCount, playerNames.take(playerCount), oneTokenOut = true)
                     }
 
-                    // Back বাটন
                     nx in 0.02f..0.18f && ny in 0.88f..0.97f -> {
                         SoundEngine.playStep()
                         showAfterPassScreen()
@@ -431,7 +426,6 @@ class MainActivity : AppCompatActivity() {
         rootContainer.addView(frame, FrameLayout.LayoutParams(-1, -1))
     }
 
-    // কাস্টম রয়্যাল প্লেয়ার নাম এডিট পপআপ
     private fun promptRoyalEditNames(count: Int, names: MutableList<String>, onSaved: () -> Unit) {
         val (dialog, card) = createRoyalDialog("✏ EDIT PLAYER NAMES")
         val badgeColors = listOf("#1E88E5", "#43A047", "#E53935", "#FBC02D")
@@ -510,10 +504,12 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ৫. মূল গেম স্ক্রিন (গেম শুরু হলে লবি মিউজিক বন্ধ হবে)
+    // ৫. মূল গেম স্ক্রিন + GAME STARTED ব্যানার + start.mp3 সাউন্ড
     private fun startGame(playerCount: Int, names: List<String>, oneTokenOut: Boolean) {
         currentScreen = "GAME"
         stopLobbyMusic()
+        playGameStartSound()
+
         rootContainer.removeAllViews()
         val activeColors = when (playerCount) {
             2 -> listOf(PlayerColor.BLUE, PlayerColor.GREEN)
@@ -525,6 +521,48 @@ class MainActivity : AppCompatActivity() {
             showHomeScreen()
         }
         rootContainer.addView(gameView, FrameLayout.LayoutParams(-1, -1))
+
+        // অ্যানিমেটেড GAME STARTED ব্যানার ওভারলে
+        val banner = TextView(this).apply {
+            text = "⚔️ GAME STARTED ⚔️"
+            textSize = 28f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.parseColor("#FFD700"))
+            gravity = Gravity.CENTER
+            setPadding(48, 32, 48, 32)
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(Color.parseColor("#E6133878"), Color.parseColor("#F20A1D45"))
+            ).apply {
+                cornerRadius = 32f
+                setStroke(6, Color.parseColor("#FFD700"))
+            }
+            scaleX = 0.2f
+            scaleY = 0.2f
+            alpha = 0f
+        }
+        rootContainer.addView(banner, FrameLayout.LayoutParams(-2, -2).apply {
+            gravity = Gravity.CENTER
+        })
+
+        banner.animate()
+            .scaleX(1.05f)
+            .scaleY(1.05f)
+            .alpha(1f)
+            .setDuration(420)
+            .setInterpolator(OvershootInterpolator())
+            .withEndAction {
+                Handler(Looper.getMainLooper()).postDelayed({
+                    banner.animate()
+                        .scaleX(0.85f)
+                        .scaleY(0.85f)
+                        .alpha(0f)
+                        .setDuration(400)
+                        .withEndAction { rootContainer.removeView(banner) }
+                        .start()
+                }, 1400)
+            }
+            .start()
     }
 
     override fun onPause() {
@@ -540,6 +578,7 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         bgMusicPlayer?.release()
+        startSfxPlayer?.release()
         supabase.stop()
     }
 }
@@ -653,7 +692,7 @@ class LudoGameView(
         if (player.name == currentTopTarget) {
             val candidates = mutableListOf<Int>()
             for (d in 1..6) {
-                if (consecutiveSixes == 2 && d == 6) continue // পরপর ৩টি ৬ এড়িয়ে চলা
+                if (consecutiveSixes == 2 && d == 6) continue
                 var weight = 10
                 for (t in myTokens) {
                     if (t.steps == -1 && d == 6) weight += 42
@@ -714,7 +753,6 @@ class LudoGameView(
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
 
-        // লুডু কিং রয়্যাল ব্যাকগ্রাউন্ড
         val bgShader = LinearGradient(
             0f, 0f, 0f, height.toFloat(),
             Color.parseColor("#0F2D52"), Color.parseColor("#18457A"), Shader.TileMode.CLAMP
@@ -728,24 +766,20 @@ class LudoGameView(
         cellSize = boardSize / 15f
         boardTop = (height - boardSize) / 2f
 
-        // গোল্ডেন বোর্ড ফ্রেম
         paint.color = Color.parseColor("#FFD700")
         canvas.drawRoundRect(
             boardLeft - 8f, boardTop - 8f,
             boardLeft + boardSize + 8f, boardTop + boardSize + 8f, 16f, 16f, paint
         )
 
-        // সাদা বোর্ড বেস
         paint.color = Color.WHITE
         canvas.drawRect(boardLeft, boardTop, boardLeft + boardSize, boardTop + boardSize, paint)
 
-        // ৪টি হোম ইয়ার্ড
         drawYard(canvas, PlayerColor.RED, 0, 0)
         drawYard(canvas, PlayerColor.GREEN, 9, 0)
         drawYard(canvas, PlayerColor.YELLOW, 9, 9)
         drawYard(canvas, PlayerColor.BLUE, 0, 9)
 
-        // কালার পাথ ও স্টার্ট সেল
         for (p in PlayerColor.values()) {
             paint.color = p.colorHex
             homeStretches[p]!!.take(5).forEach { (cx, cy) ->
@@ -761,7 +795,6 @@ class LudoGameView(
             )
         }
 
-        // গ্রিড বর্ডার
         paint.style = Paint.Style.STROKE
         paint.color = Color.parseColor("#78909C")
         paint.strokeWidth = 2f
@@ -771,7 +804,6 @@ class LudoGameView(
         }
         paint.style = Paint.Style.FILL
 
-        // স্টার সেফ জোন
         safeGlobalIndices.forEach { idx ->
             val (cx, cy) = mainTrack[idx]
             val isStart = PlayerColor.values().any { it.startOffset == idx }
@@ -781,10 +813,8 @@ class LudoGameView(
             canvas.drawText("★", boardLeft + (cx + 0.5f) * cellSize, boardTop + (cy + 0.73f) * cellSize, paint)
         }
 
-        // সেন্টার ত্রিভুজ
         drawCenterTriangles(canvas)
 
-        // প্লেয়ারদের নাম (gamescnreen.jpg-এর মতো একদম নিখুঁত পজিশনে)
         activePlayers.forEachIndexed { idx, p ->
             val pName = playerNames.getOrElse(idx) { p.name }
             paint.color = Color.WHITE
@@ -810,11 +840,9 @@ class LudoGameView(
             }
         }
 
-        // চার কোণার ডাইস বক্স (gamescnreen.jpg স্টাইল)
         val curr = activePlayers[currentPlayerIdx]
         drawCornerDiceBoxes(canvas, curr, boardSize)
 
-        // সব পিন-শেপ গুটি আঁকা
         val activeTokens = tokens.filter { it.steps < 57 }
         val grouped = activeTokens.groupBy { getTokenGridPos(it) }
         for ((pos, group) in grouped) {
@@ -829,7 +857,6 @@ class LudoGameView(
             }
         }
 
-        // নিচে মেনু ও সাউন্ড বাটন
         backRect.set(28f, height - 105f, 118f, height - 25f)
         paint.color = Color.parseColor("#1E3A8A")
         canvas.drawRoundRect(backRect, 20f, 20f, paint)
@@ -844,7 +871,6 @@ class LudoGameView(
         paint.color = Color.WHITE
         canvas.drawText(if (SoundEngine.isMuted) "🔇" else "🔊", muteRect.centerX(), muteRect.centerY() + 14f, paint)
 
-        // ম্যাচ রেজাল্ট স্ক্রিন
         if (finishedRankings.size >= activePlayers.size - 1 && activePlayers.size > 1) {
             paint.color = Color.argb(232, 10, 20, 50)
             canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
@@ -906,14 +932,12 @@ class LudoGameView(
             val isCurrent = (p == curr)
             if (isCurrent) activeDiceRect.set(rect)
 
-            // গোল্ডেন ও কালার ফ্রেম
             paint.color = if (isCurrent) Color.parseColor("#FFD700") else Color.parseColor("#64748B")
             canvas.drawRoundRect(rect, 20f, 20f, paint)
 
             paint.color = Color.parseColor("#1E3A8A")
             canvas.drawRoundRect(rect.left + 6f, rect.top + 6f, rect.right - 6f, rect.bottom - 6f, 16f, 16f, paint)
 
-            // বক্সের একপাশে প্লেয়ারের পিন ব্যাজ (gamescnreen.jpg এর মতো)
             val badgeX = if (p == PlayerColor.BLUE || p == PlayerColor.RED) rect.left + 48f else rect.right - 48f
             val badgeY = rect.centerY()
             paint.color = Color.WHITE
@@ -923,7 +947,6 @@ class LudoGameView(
             paint.color = Color.WHITE
             canvas.drawCircle(badgeX, badgeY - 3f, 11f, paint)
 
-            // অন্য পাশে সাদা ডাইস স্কয়ার
             val dSize = boxH - 26f
             val dLeft = if (p == PlayerColor.BLUE || p == PlayerColor.RED) rect.right - dSize - 14f else rect.left + 14f
             val dTop = rect.top + 13f
@@ -945,7 +968,6 @@ class LudoGameView(
             }
             canvas.restore()
 
-            // অ্যাক্টিভ তীর চিহ্ন (◀ / ▶)
             if (isCurrent && !isDiceRolled) {
                 val shift = sin(pulsePhase) * 6f
                 paint.color = Color.parseColor("#FF9800")
@@ -1082,7 +1104,6 @@ class LudoGameView(
             if (diceValue == 6) {
                 consecutiveSixes++
                 SoundEngine.playHomeOrSix()
-                // লুডু কিং নিয়ম: পরপর ৩টি ৬ পড়লে চাল বাতিল
                 if (consecutiveSixes >= 3) {
                     consecutiveSixes = 0
                     handler.postDelayed({ nextTurn(false); invalidate() }, 500)
