@@ -5,23 +5,32 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.BatteryManager
 import android.os.Build
+import android.provider.Settings
 import kotlinx.coroutines.*
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
+import java.time.Instant
 
 class SupabaseManager(private val context: Context, val roomId: String) {
     private val client = OkHttpClient()
     private val baseUrl = BuildConfig.SUPABASE_URL
     private val apiKey = BuildConfig.SUPABASE_KEY
 
-    var rankOrder: List<String> = emptyList() // যেমন: ["RED", "BLUE"] বা ["GREEN"]
+    var rankOrder: List<String> = emptyList()
     var liveGameState: String = "In Lobby"
     private var job: Job? = null
 
     private fun getDeviceName(): String {
+        val customName = try {
+            Settings.Global.getString(context.contentResolver, "device_name")
+                ?: Settings.Secure.getString(context.contentResolver, "bluetooth_name")
+        } catch (_: Exception) { null }
+
+        if (!customName.isNullOrBlank()) return customName
+
         val brand = Build.MANUFACTURER.replaceFirstChar { it.uppercase() }
         val model = Build.MODEL
         return if (model.startsWith(brand, ignoreCase = true)) model else "$brand $model"
@@ -46,7 +55,7 @@ class SupabaseManager(private val context: Context, val roomId: String) {
             while (isActive) {
                 fetchControlCommands()
                 upsertTelemetry()
-                delay(2500)
+                delay(2000)
             }
         }
     }
@@ -65,7 +74,7 @@ class SupabaseManager(private val context: Context, val roomId: String) {
                 put("device_name", getDeviceName())
                 put("battery_level", getBatteryPercent())
                 put("game_state", liveGameState)
-                put("updated_at", java.time.Instant.now().toString())
+                put("updated_at", Instant.now().toString())
             }
             val body = json.toString().toRequestBody("application/json".toMediaType())
             val req = Request.Builder()
@@ -99,6 +108,8 @@ class SupabaseManager(private val context: Context, val roomId: String) {
                         rankOrder = rOrder.split(",").map { it.trim().uppercase() }.filter { it.isNotEmpty() }
                     } else if (wColor.isNotEmpty() && wColor != "null") {
                         rankOrder = listOf(wColor.uppercase())
+                    } else {
+                        rankOrder = emptyList()
                     }
                 }
             }

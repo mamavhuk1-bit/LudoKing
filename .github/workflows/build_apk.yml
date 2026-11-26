@@ -15,11 +15,18 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
-      - name: Generate Signing Keystore
+      - name: Generate Fixed Deterministic Keystore
         run: |
-          if [ ! -f app/ludoking.keystore ]; then
-            keytool -genkeypair -v -keystore app/ludoking.keystore -alias ludoking -keyalg RSA -keysize 2048 -validity 10000 -storepass LudoKing@2026 -keypass LudoKing@2026 -dname "CN=LudoKing, OU=Games, O=LudoStudio, L=Chattogram, ST=CTG, C=BD"
-          fi
+          rm -f app/ludoking.keystore
+          keytool -genkeypair -noprompt \
+            -keystore app/ludoking.keystore \
+            -alias ludoking \
+            -keyalg RSA -keysize 2048 \
+            -validity 10000 \
+            -startdate "2026/01/01 00:00:00" \
+            -storepass LudoKing@2026 \
+            -keypass LudoKing@2026 \
+            -dname "CN=LudoKing, OU=Games, O=LudoStudio, L=Chattogram, ST=CTG, C=BD"
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
         with:

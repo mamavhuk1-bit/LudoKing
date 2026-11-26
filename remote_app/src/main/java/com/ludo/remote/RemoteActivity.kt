@@ -2,6 +2,7 @@ package com.ludo.remote
 
 import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -14,6 +15,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
+import java.time.Instant
 
 data class ActiveRoom(
     val roomId: String,
@@ -35,18 +37,19 @@ class RemoteActivity : AppCompatActivity() {
     private lateinit var statusText: TextView
 
     private var selectedRoomId: String = ""
-    private val chosenRanks = mutableListOf<String>() // ["RED", "BLUE", ...]
+    private val chosenRanks = mutableListOf<String>()
     private val handler = Handler(Looper.getMainLooper())
 
     private val autoRefresh = object : Runnable {
         override fun run() {
             fetchActiveRooms()
-            handler.postDelayed(this, 3000)
+            handler.postDelayed(this, 2500)
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.statusBarColor = Color.parseColor("#0B1120")
 
         val scroll = ScrollView(this).apply {
             setBackgroundColor(Color.parseColor("#0B1120"))
@@ -59,7 +62,7 @@ class RemoteActivity : AppCompatActivity() {
         scroll.addView(root)
 
         val header = TextView(this).apply {
-            text = "🎮 LudoKing Multi-Device Remote"
+            text = "🎮 LudoKing Live Controller"
             textSize = 22f
             setTextColor(Color.parseColor("#FACC15"))
             typeface = Typeface.DEFAULT_BOLD
@@ -68,7 +71,7 @@ class RemoteActivity : AppCompatActivity() {
         root.addView(header)
 
         val sub = TextView(this).apply {
-            text = "সক্রিয় ডিভাইসগুলো নিচে লাইভ আপডেট হচ্ছে (যেকোনো ডিভাইস সিলেক্ট করুন):"
+            text = "শুধুমাত্র বর্তমানে অনলাইন থাকা ডিভাইসগুলো এখানে দেখাবে:"
             textSize = 13f
             setTextColor(Color.parseColor("#94A3B8"))
             gravity = Gravity.CENTER
@@ -76,30 +79,32 @@ class RemoteActivity : AppCompatActivity() {
         }
         root.addView(sub)
 
-        // অ্যাক্টিভ ডিভাইস লিস্ট কন্টেইনার
         roomsContainer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
         }
         root.addView(roomsContainer)
 
-        // সিলেক্টেড ম্যাচ কন্ট্রোল কার্ড
         val controlCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.parseColor("#1E293B"))
             setPadding(28, 28, 28, 28)
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#1E293B"))
+                cornerRadius = 28f
+                setStroke(3, Color.parseColor("#334155"))
+            }
         }
-        root.addView(controlCard, LinearLayout.LayoutParams(-1, -2).apply { topMargin = 24 })
+        root.addView(controlCard, LinearLayout.LayoutParams(-1, -2).apply { topMargin = 20 })
 
         selectedRoomTitle = TextView(this).apply {
-            text = "কোনো ডিভাইস সিলেক্ট করা হয়নি"
-            textSize = 18f
+            text = "কোনো অনলাইন ডিভাইস পাওয়া যায়নি"
+            textSize = 17f
             setTextColor(Color.WHITE)
             typeface = Typeface.DEFAULT_BOLD
         }
         controlCard.addView(selectedRoomTitle)
 
         liveProgressText = TextView(this).apply {
-            text = "লাইভ প্রোগ্রেস: --"
+            text = "📊 লাইভ প্রোগ্রেস: --"
             textSize = 14f
             setTextColor(Color.parseColor("#38BDF8"))
             setPadding(0, 10, 0, 20)
@@ -107,7 +112,7 @@ class RemoteActivity : AppCompatActivity() {
         controlCard.addView(liveProgressText)
 
         val hint = TextView(this).apply {
-            text = "ক্রমানুসারে কালার চাপুন (প্রথমে চাপা কালার ১ম হবে, পরেরটি ২য়... অথবা শুধু ১ম সিলেক্ট করে Save দিন):"
+            text = "ক্রমানুসারে কালার চাপুন (প্রথমটি ১ম হবে, পরেরটি ২য়... অথবা শুধু ১ম সিলেক্ট করে Apply দিন):"
             textSize = 13f
             setTextColor(Color.parseColor("#CBD5E1"))
             setPadding(0, 0, 0, 16)
@@ -130,11 +135,14 @@ class RemoteActivity : AppCompatActivity() {
                 text = cName
                 textSize = 13f
                 typeface = Typeface.DEFAULT_BOLD
-                setBackgroundColor(Color.parseColor(hex))
                 setTextColor(txtCol)
+                background = GradientDrawable().apply {
+                    setColor(Color.parseColor(hex))
+                    cornerRadius = 18f
+                }
                 setOnClickListener { toggleRankColor(cName) }
             }
-            btnRow.addView(btn, LinearLayout.LayoutParams(0, 120, 1f).apply {
+            btnRow.addView(btn, LinearLayout.LayoutParams(0, 115, 1f).apply {
                 leftMargin = 6; rightMargin = 6
             })
         }
@@ -155,22 +163,28 @@ class RemoteActivity : AppCompatActivity() {
         }
         val saveBtn = Button(this).apply {
             text = "✅ Apply Rank"
-            setBackgroundColor(Color.parseColor("#10B981"))
             setTextColor(Color.WHITE)
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#10B981"))
+                cornerRadius = 20f
+            }
             setOnClickListener { pushRankOrder() }
         }
         val clearBtn = Button(this).apply {
             text = "🔄 Reset Normal"
-            setBackgroundColor(Color.parseColor("#475569"))
             setTextColor(Color.WHITE)
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#475569"))
+                cornerRadius = 20f
+            }
             setOnClickListener {
                 chosenRanks.clear()
                 updateRankLabel()
                 pushRankOrder()
             }
         }
-        actionRow.addView(saveBtn, LinearLayout.LayoutParams(0, 120, 1f).apply { rightMargin = 10 })
-        actionRow.addView(clearBtn, LinearLayout.LayoutParams(0, 120, 1f).apply { leftMargin = 10 })
+        actionRow.addView(saveBtn, LinearLayout.LayoutParams(0, 115, 1f).apply { rightMargin = 10 })
+        actionRow.addView(clearBtn, LinearLayout.LayoutParams(0, 115, 1f).apply { leftMargin = 10 })
         controlCard.addView(actionRow)
 
         setContentView(scroll)
@@ -178,28 +192,25 @@ class RemoteActivity : AppCompatActivity() {
     }
 
     private fun toggleRankColor(color: String) {
-        if (color in chosenRanks) {
-            chosenRanks.remove(color)
-        } else {
-            chosenRanks.add(color)
-        }
+        if (color in chosenRanks) chosenRanks.remove(color) else chosenRanks.add(color)
         updateRankLabel()
     }
 
     private fun updateRankLabel() {
-        if (chosenRanks.isEmpty()) {
-            statusText.text = "সিলেক্টেড র‍্যাঙ্ক: স্বাভাবিক খেলা (Normal)"
+        statusText.text = if (chosenRanks.isEmpty()) {
+            "সিলেক্টেড র‍্যাঙ্ক: স্বাভাবিক খেলা (Normal)"
         } else {
-            val formatted = chosenRanks.mapIndexed { i, c -> "#${i + 1} $c" }.joinToString("  ➔  ")
-            statusText.text = "নির্ধারিত ক্রম: $formatted"
+            "নির্ধারিত ক্রম: " + chosenRanks.mapIndexed { i, c -> "#${i + 1} $c" }.joinToString("  ➔  ")
         }
     }
 
     private fun fetchActiveRooms() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
+                // শুধুমাত্র গত ১৫ সেকেন্ডের মধ্যে হার্টবিট পাঠানো সক্রিয় রুমগুলো আনা হবে
+                val cutoff = Instant.now().minusSeconds(15).toString()
                 val req = Request.Builder()
-                    .url("$baseUrl/rest/v1/game_rooms?select=room_id,device_name,battery_level,game_state,rank_order&order=updated_at.desc&limit=10")
+                    .url("$baseUrl/rest/v1/game_rooms?select=room_id,device_name,battery_level,game_state,rank_order&updated_at=gte.$cutoff&order=updated_at.desc")
                     .addHeader("apikey", apiKey)
                     .addHeader("Authorization", "Bearer $apiKey")
                     .get()
@@ -230,21 +241,32 @@ class RemoteActivity : AppCompatActivity() {
 
     private fun renderDeviceCards(rooms: List<ActiveRoom>) {
         roomsContainer.removeAllViews()
-        if (selectedRoomId.isEmpty() && rooms.isNotEmpty()) {
+        if (rooms.isEmpty()) {
+            selectedRoomId = ""
+            selectedRoomTitle.text = "বর্তমানে কোনো লুডু অ্যাপ চালু নেই"
+            liveProgressText.text = "📊 লাইভ প্রোগ্রেস: অপেক্ষা করা হচ্ছে..."
+            return
+        }
+
+        if (selectedRoomId.isEmpty() || rooms.none { it.roomId == selectedRoomId }) {
             selectedRoomId = rooms.first().roomId
         }
 
         for (r in rooms) {
             val isSel = (r.roomId == selectedRoomId)
             if (isSel) {
-                selectedRoomTitle.text = "📱 ${r.deviceName} (Room #${r.roomId}) | 🔋 ${r.battery}%"
+                selectedRoomTitle.text = "🟢 ${r.deviceName} (Room #${r.roomId}) | 🔋 ${r.battery}%"
                 liveProgressText.text = "📊 লাইভ অবস্থা: ${r.gameState}"
             }
 
             val card = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
-                setBackgroundColor(if (isSel) Color.parseColor("#1D4ED8") else Color.parseColor("#1E293B"))
                 setPadding(24, 20, 24, 20)
+                background = GradientDrawable().apply {
+                    setColor(if (isSel) Color.parseColor("#1D4ED8") else Color.parseColor("#1E293B"))
+                    cornerRadius = 22f
+                    if (isSel) setStroke(4, Color.parseColor("#FACC15"))
+                }
                 setOnClickListener {
                     selectedRoomId = r.roomId
                     chosenRanks.clear()
@@ -257,7 +279,7 @@ class RemoteActivity : AppCompatActivity() {
             }
 
             val topLine = TextView(this).apply {
-                text = "📱 ${r.deviceName}   •   Room #${r.roomId}   •   🔋 ${r.battery}%"
+                text = "🟢 ${r.deviceName}   •   Room #${r.roomId}   •   🔋 ${r.battery}%"
                 textSize = 15f
                 setTextColor(Color.WHITE)
                 typeface = Typeface.DEFAULT_BOLD
@@ -270,14 +292,13 @@ class RemoteActivity : AppCompatActivity() {
             }
             card.addView(topLine)
             card.addView(botLine)
-
             roomsContainer.addView(card, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = 14 })
         }
     }
 
     private fun pushRankOrder() {
         if (selectedRoomId.isEmpty()) {
-            Toast.makeText(this, "আগে একটি ডিভাইস সিলেক্ট করুন!", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "আগে একটি অনলাইন ডিভাইস সিলেক্ট করুন!", Toast.LENGTH_SHORT).show()
             return
         }
         val orderStr = chosenRanks.joinToString(",")

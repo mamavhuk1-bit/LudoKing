@@ -1,17 +1,19 @@
 package com.ludo.king
 
-import android.animation.ObjectAnimator
-import android.animation.PropertyValuesHolder
 import android.animation.ValueAnimator
-import android.app.AlertDialog
+import android.app.Dialog
 import android.content.Context
 import android.graphics.*
+import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.GradientDrawable
+import android.media.MediaPlayer
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.*
 import android.view.animation.OvershootInterpolator
 import android.widget.*
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import kotlin.math.hypot
 import kotlin.math.sin
@@ -30,21 +32,179 @@ class MainActivity : AppCompatActivity() {
     private lateinit var supabase: SupabaseManager
     private lateinit var rootContainer: FrameLayout
     private val roomId = Random.nextInt(1000, 9999).toString()
+
+    private var currentScreen = "SPLASH"
     private var vsComputer = false
+    private var bgMusicPlayer: MediaPlayer? = null
+    private var isMusicMuted = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+
+        // স্ট্যাটাস বার ফিক্স (কালো না দেখিয়ে রয়্যাল নেভি ব্লু দেখাবে)
+        window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+        window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
+        window.statusBarColor = Color.parseColor("#0D1B4C")
+
         supabase = SupabaseManager(this, roomId)
         supabase.startSync()
 
-        rootContainer = FrameLayout(this)
+        rootContainer = FrameLayout(this).apply {
+            fitsSystemWindows = true
+            setBackgroundColor(Color.parseColor("#0D1B4C"))
+        }
         setContentView(rootContainer)
+
+        setupBackNavigation()
+        startLobbyMusic()
         showSplashScreen()
+    }
+
+    private fun startLobbyMusic() {
+        try {
+            if (bgMusicPlayer == null) {
+                bgMusicPlayer = MediaPlayer.create(this, R.raw.gamesound)?.apply {
+                    isLooping = true
+                    setVolume(0.75f, 0.75f)
+                }
+            }
+            if (!isMusicMuted && bgMusicPlayer?.isPlaying == false) {
+                bgMusicPlayer?.start()
+            }
+        } catch (_: Exception) {}
+    }
+
+    private fun stopLobbyMusic() {
+        try {
+            if (bgMusicPlayer?.isPlaying == true) {
+                bgMusicPlayer?.pause()
+            }
+        } catch (_: Exception) {}
+    }
+
+    private fun toggleLobbyMute(): Boolean {
+        isMusicMuted = !isMusicMuted
+        SoundEngine.isMuted = isMusicMuted
+        if (isMusicMuted) stopLobbyMusic() else if (currentScreen != "GAME") startLobbyMusic()
+        return isMusicMuted
+    }
+
+    // হার্ডওয়্যার ব্যাক বাটন হ্যান্ডলার (ধাপে ধাপে পেছনে যাবে)
+    private fun setupBackNavigation() {
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                SoundEngine.playStep()
+                when (currentScreen) {
+                    "GAME" -> showRoyalConfirmDialog("Leave Match?", "Do you want to quit the current match and return to Home?") {
+                        startLobbyMusic()
+                        showHomeScreen()
+                    }
+                    "AFTER_NEXT" -> showAfterPassScreen()
+                    "AFTER_PASS" -> showHomeScreen()
+                    "HOME" -> showRoyalConfirmDialog("Exit Ludo King", "Are you sure you want to exit the game?") {
+                        finish()
+                    }
+                }
+            }
+        })
+    }
+
+    // প্রিমিয়াম রয়্যাল কাস্টম পপ-আপ ডায়ালগ
+    private fun createRoyalDialog(titleText: String): Pair<Dialog, LinearLayout> {
+        val dialog = Dialog(this)
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(48, 36, 48, 36)
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(Color.parseColor("#133878"), Color.parseColor("#0A1D45"))
+            ).apply {
+                cornerRadius = 36f
+                setStroke(6, Color.parseColor("#FFD700"))
+            }
+        }
+
+        val title = TextView(this).apply {
+            text = titleText
+            textSize = 20f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.parseColor("#FFD700"))
+            gravity = Gravity.CENTER
+            setPadding(0, 0, 0, 24)
+        }
+        card.addView(title)
+
+        dialog.setContentView(card)
+        dialog.window?.setLayout((resources.displayMetrics.widthPixels * 0.86).toInt(), ViewGroup.LayoutParams.WRAP_CONTENT)
+        return dialog to card
+    }
+
+    private fun makeRoyalButton(label: String, bgHex: String, textHex: Int = Color.WHITE): Button {
+        return Button(this).apply {
+            text = label
+            textSize = 15f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(textHex)
+            isAllCaps = false
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor(bgHex))
+                cornerRadius = 24f
+                setStroke(3, Color.parseColor("#FFD700"))
+            }
+        }
+    }
+
+    private fun showRoyalConfirmDialog(title: String, msg: String, onYes: () -> Unit) {
+        val (dialog, card) = createRoyalDialog(title)
+        val body = TextView(this).apply {
+            text = msg
+            textSize = 15f
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            setPadding(0, 0, 0, 32)
+        }
+        card.addView(body)
+
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            weightSum = 2f
+        }
+        val noBtn = makeRoyalButton("Cancel", "#334155").apply {
+            setOnClickListener { dialog.dismiss() }
+        }
+        val yesBtn = makeRoyalButton("Confirm", "#16A34A").apply {
+            setOnClickListener { dialog.dismiss(); onYes() }
+        }
+        row.addView(noBtn, LinearLayout.LayoutParams(0, 110, 1f).apply { rightMargin = 12 })
+        row.addView(yesBtn, LinearLayout.LayoutParams(0, 110, 1f).apply { leftMargin = 12 })
+        card.addView(row)
+        dialog.show()
+    }
+
+    private fun showServerError() {
+        val (dialog, card) = createRoyalDialog("⚠ SERVER CONNECTION ERROR")
+        val body = TextView(this).apply {
+            text = "Unable to connect to Ludo King Online Servers (Error 503).\n\nPlease check your internet connection or play Pass N Play / Computer mode."
+            textSize = 14f
+            setTextColor(Color.parseColor("#E2E8F0"))
+            gravity = Gravity.CENTER
+            setPadding(0, 0, 0, 32)
+        }
+        card.addView(body)
+
+        val okBtn = makeRoyalButton("OK", "#E53935").apply {
+            setOnClickListener { dialog.dismiss() }
+        }
+        card.addView(okBtn, LinearLayout.LayoutParams(-1, 110))
+        dialog.show()
     }
 
     // ১. স্প্ল্যাশ স্ক্রিন (open.jpg)
     private fun showSplashScreen() {
+        currentScreen = "SPLASH"
         rootContainer.removeAllViews()
         val iv = ImageView(this).apply {
             setImageResource(R.drawable.screen_open)
@@ -53,11 +213,13 @@ class MainActivity : AppCompatActivity() {
         rootContainer.addView(iv, FrameLayout.LayoutParams(-1, -1))
         Handler(Looper.getMainLooper()).postDelayed({
             showHomeScreen()
-        }, 2300)
+        }, 2200)
     }
 
-    // ২. হোম স্ক্রিন (homepage.jpg + অ্যানিমেশন + শুধু Computer ও Pass N Play সক্রিয়)
+    // ২. হোম স্ক্রিন (homepage.jpg)
     private fun showHomeScreen() {
+        currentScreen = "HOME"
+        startLobbyMusic()
         supabase.pushImmediateState("On Home Screen")
         rootContainer.removeAllViews()
         val frame = FrameLayout(this)
@@ -68,7 +230,6 @@ class MainActivity : AppCompatActivity() {
         }
         frame.addView(bg, FrameLayout.LayoutParams(-1, -1))
 
-        // অ্যানিমেটেড গ্লো ওভারলে (Computer ও Pass N Play বাটনের ওপর)
         val animOverlay = object : View(this) {
             var phase = 0f
             val p = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -79,64 +240,52 @@ class MainActivity : AppCompatActivity() {
                 ValueAnimator.ofFloat(0f, 6.28f).apply {
                     duration = 1600
                     repeatCount = ValueAnimator.INFINITE
-                    addUpdateListener {
-                        phase = it.animatedValue as Float
-                        invalidate()
-                    }
+                    addUpdateListener { phase = it.animatedValue as Float; invalidate() }
                     start()
                 }
             }
             override fun onDraw(canvas: Canvas) {
-                val alpha = (120 + sin(phase) * 110).toInt().coerceIn(20, 255)
+                val alpha = (110 + sin(phase) * 120).toInt().coerceIn(20, 255)
                 p.color = Color.argb(alpha, 255, 235, 59)
-                // Computer button glow
                 canvas.drawRoundRect(width * 0.20f, height * 0.542f, width * 0.478f, height * 0.638f, 24f, 24f, p)
-                // Pass N Play button glow
                 canvas.drawRoundRect(width * 0.522f, height * 0.542f, width * 0.80f, height * 0.638f, 24f, 24f, p)
             }
         }
         frame.addView(animOverlay, FrameLayout.LayoutParams(-1, -1))
 
-        // টাচ হ্যান্ডলার
+        // মিউট বাটন (উপরের ডান কোণায়)
+        val muteBtn = makeMuteButton()
+        frame.addView(muteBtn, FrameLayout.LayoutParams(110, 110).apply {
+            gravity = Gravity.TOP or Gravity.END
+            topMargin = 110; rightMargin = 24
+        })
+
         frame.setOnTouchListener { v, ev ->
             if (ev.action == MotionEvent.ACTION_DOWN) {
                 val nx = ev.x / v.width
                 val ny = ev.y / v.height
                 when {
-                    // COMPUTER বাটন (বাম দিকের হলুদ বক্স)
                     nx in 0.19f..0.48f && ny in 0.53f..0.65f -> {
                         SoundEngine.playStep()
                         vsComputer = true
                         showAfterPassScreen()
                     }
-                    // PASS N PLAY বাটন (ডান দিকের হলুদ বক্স)
                     nx in 0.52f..0.81f && ny in 0.53f..0.65f -> {
                         SoundEngine.playStep()
                         vsComputer = false
                         showAfterPassScreen()
                     }
-                    // বাকি সব বাটনে সার্ভার এরর
-                    else -> {
-                        showServerError()
-                    }
+                    else -> showServerError()
                 }
             }
             true
         }
-
         rootContainer.addView(frame, FrameLayout.LayoutParams(-1, -1))
-    }
-
-    private fun showServerError() {
-        AlertDialog.Builder(this)
-            .setTitle("Server Error (503)")
-            .setMessage("Unable to connect to Ludo King online servers at the moment. Please check your network or play Pass N Play / Computer mode.")
-            .setPositiveButton("OK", null)
-            .show()
     }
 
     // ৩. মোড সিলেকশন স্ক্রিন (afterpass.jpg)
     private fun showAfterPassScreen() {
+        currentScreen = "AFTER_PASS"
         rootContainer.removeAllViews()
         val frame = FrameLayout(this)
         val bg = ImageView(this).apply {
@@ -145,7 +294,7 @@ class MainActivity : AppCompatActivity() {
         }
         frame.addView(bg, FrameLayout.LayoutParams(-1, -1))
 
-        var selectedMode = 0 // 0=Classic, 1=TeamUp, 2=Quick
+        var selectedMode = 0
         val modeIndicator = object : View(this) {
             val p = Paint(Paint.ANTI_ALIAS_FLAG)
             override fun onDraw(canvas: Canvas) {
@@ -167,6 +316,11 @@ class MainActivity : AppCompatActivity() {
         }
         frame.addView(modeIndicator, FrameLayout.LayoutParams(-1, -1))
 
+        frame.addView(makeMuteButton(), FrameLayout.LayoutParams(110, 110).apply {
+            gravity = Gravity.TOP or Gravity.END
+            topMargin = 110; rightMargin = 24
+        })
+
         frame.setOnTouchListener { v, ev ->
             if (ev.action == MotionEvent.ACTION_DOWN) {
                 val nx = ev.x / v.width
@@ -175,12 +329,10 @@ class MainActivity : AppCompatActivity() {
                     ny in 0.45f..0.54f -> { selectedMode = 0; SoundEngine.playStep(); modeIndicator.invalidate() }
                     ny in 0.56f..0.65f -> { selectedMode = 1; SoundEngine.playStep(); modeIndicator.invalidate() }
                     ny in 0.66f..0.74f -> { selectedMode = 2; SoundEngine.playStep(); modeIndicator.invalidate() }
-                    // Next বাটন
                     nx in 0.30f..0.70f && ny in 0.74f..0.83f -> {
                         SoundEngine.playStep()
                         showAfterNextScreen()
                     }
-                    // নিচের বাম কোণায় Back বাটন
                     nx in 0.02f..0.18f && ny in 0.88f..0.97f -> {
                         SoundEngine.playStep()
                         showHomeScreen()
@@ -189,12 +341,12 @@ class MainActivity : AppCompatActivity() {
             }
             true
         }
-
         rootContainer.addView(frame, FrameLayout.LayoutParams(-1, -1))
     }
 
-    // ৪. প্লেয়ার ও কালার সেটআপ স্ক্রিন (afternext.jpg)
+    // ৪. প্লেয়ার ও কালার সেটআপ স্ক্রিন (afternext.jpg - সঠিক সবুজ রিং পজিশন ও রয়্যাল পপআপ সহ)
     private fun showAfterNextScreen() {
+        currentScreen = "AFTER_NEXT"
         rootContainer.removeAllViews()
         val frame = FrameLayout(this)
         val bg = ImageView(this).apply {
@@ -203,51 +355,59 @@ class MainActivity : AppCompatActivity() {
         }
         frame.addView(bg, FrameLayout.LayoutParams(-1, -1))
 
-        var playerCount = 2 // 2, 3, or 4
+        var playerCount = 2
         val playerNames = mutableListOf("Player 1", "Player 2", "Player 3", "Player 4")
 
         val setupOverlay = object : View(this) {
             val p = Paint(Paint.ANTI_ALIAS_FLAG)
             override fun onDraw(canvas: Canvas) {
-                // 2P, 3P, 4P হাইলাইট রিং
-                val pxPositions = mapOf(2 to 0.19f, 3 to 0.345f, 4 to 0.50f)
+                // afternext.jpg-এর 2P, 3P, 4P বাটনের সঠিক কেন্দ্রবিন্দু
+                val pxPositions = mapOf(2 to 0.184f, 3 to 0.340f, 4 to 0.496f)
+                val ringY = height * 0.583f
+                val ringR = width * 0.062f
+
                 pxPositions.forEach { (cnt, rx) ->
                     if (cnt == playerCount) {
                         p.style = Paint.Style.STROKE
-                        p.strokeWidth = 8f
+                        p.strokeWidth = 9f
                         p.color = Color.parseColor("#00E676")
-                        canvas.drawCircle(width * rx, height * 0.578f, width * 0.062f, p)
+                        canvas.drawCircle(width * rx, ringY, ringR, p)
                         p.style = Paint.Style.FILL
                     }
                 }
 
-                // বর্তমান প্লেয়ার নাম ও সংখ্যা দেখানো
-                p.color = Color.WHITE
-                p.textSize = 36f
+                // বর্তমান সেট করা প্লেয়ারদের নাম সুন্দর গোল্ডেন ব্যানারে দেখানো
+                p.color = Color.parseColor("#FFD700")
+                p.textSize = 32f
                 p.textAlign = Paint.Align.CENTER
                 p.typeface = Typeface.DEFAULT_BOLD
-                val activeList = playerNames.take(playerCount).joinToString(" vs ")
-                canvas.drawText("$playerCount Players: $activeList", width * 0.5f, height * 0.515f, p)
+                val activeList = playerNames.take(playerCount).joinToString("  •  ")
+                canvas.drawText(activeList, width * 0.50f, height * 0.372f, p)
             }
         }
         frame.addView(setupOverlay, FrameLayout.LayoutParams(-1, -1))
+
+        frame.addView(makeMuteButton(), FrameLayout.LayoutParams(110, 110).apply {
+            gravity = Gravity.TOP or Gravity.END
+            topMargin = 110; rightMargin = 24
+        })
 
         frame.setOnTouchListener { v, ev ->
             if (ev.action == MotionEvent.ACTION_DOWN) {
                 val nx = ev.x / v.width
                 val ny = ev.y / v.height
                 when {
-                    // 2P, 3P, 4P বাটন
-                    ny in 0.53f..0.62f && nx in 0.12f..0.26f -> { playerCount = 2; SoundEngine.playStep(); setupOverlay.invalidate() }
-                    ny in 0.53f..0.62f && nx in 0.28f..0.41f -> { playerCount = 3; SoundEngine.playStep(); setupOverlay.invalidate() }
-                    ny in 0.53f..0.62f && nx in 0.43f..0.57f -> { playerCount = 4; SoundEngine.playStep(); setupOverlay.invalidate() }
+                    // 2P, 3P, 4P সিলেকশন
+                    ny in 0.53f..0.63f && nx in 0.11f..0.25f -> { playerCount = 2; SoundEngine.playStep(); setupOverlay.invalidate() }
+                    ny in 0.53f..0.63f && nx in 0.27f..0.41f -> { playerCount = 3; SoundEngine.playStep(); setupOverlay.invalidate() }
+                    ny in 0.53f..0.63f && nx in 0.43f..0.57f -> { playerCount = 4; SoundEngine.playStep(); setupOverlay.invalidate() }
 
-                    // প্লেয়ার নাম এডিট করার এরিয়া (y: 0.39..0.49)
-                    ny in 0.38f..0.49f && nx in 0.40f..0.75f -> {
-                        promptEditNames(playerCount, playerNames) { setupOverlay.invalidate() }
+                    // প্লেয়ার নাম এডিট বক্স এরিয়া
+                    ny in 0.39f..0.52f && nx in 0.38f..0.78f -> {
+                        promptRoyalEditNames(playerCount, playerNames) { setupOverlay.invalidate() }
                     }
 
-                    // Play বাটন (সাধারণ খেলা)
+                    // Play বাটন
                     nx in 0.32f..0.68f && ny in 0.64f..0.71f -> {
                         SoundEngine.playHomeOrSix()
                         startGame(playerCount, playerNames.take(playerCount), oneTokenOut = false)
@@ -268,38 +428,92 @@ class MainActivity : AppCompatActivity() {
             }
             true
         }
-
         rootContainer.addView(frame, FrameLayout.LayoutParams(-1, -1))
     }
 
-    private fun promptEditNames(count: Int, names: MutableList<String>, onSaved: () -> Unit) {
-        val layout = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(40, 20, 40, 10)
-        }
+    // কাস্টম রয়্যাল প্লেয়ার নাম এডিট পপআপ
+    private fun promptRoyalEditNames(count: Int, names: MutableList<String>, onSaved: () -> Unit) {
+        val (dialog, card) = createRoyalDialog("✏ EDIT PLAYER NAMES")
+        val badgeColors = listOf("#1E88E5", "#43A047", "#E53935", "#FBC02D")
+
         val inputs = (0 until count).map { idx ->
-            EditText(this).apply {
-                setText(names[idx])
-                hint = "Player ${idx + 1} Name"
-                layout.addView(this)
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(0, 8, 0, 8)
             }
+            val dot = View(this).apply {
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(Color.parseColor(badgeColors[idx]))
+                    setStroke(3, Color.WHITE)
+                }
+            }
+            row.addView(dot, LinearLayout.LayoutParams(44, 44).apply { rightMargin = 16 })
+
+            val et = EditText(this).apply {
+                setText(names[idx])
+                hint = "Player ${idx + 1}"
+                setTextColor(Color.WHITE)
+                setHintTextColor(Color.LTGRAY)
+                textSize = 16f
+                setPadding(24, 18, 24, 18)
+                background = GradientDrawable().apply {
+                    setColor(Color.parseColor("#1E3A8A"))
+                    cornerRadius = 18f
+                    setStroke(2, Color.parseColor("#FFD700"))
+                }
+            }
+            row.addView(et, LinearLayout.LayoutParams(-1, -2))
+            card.addView(row)
+            et
         }
-        AlertDialog.Builder(this)
-            .setTitle("Edit Player Names")
-            .setView(layout)
-            .setPositiveButton("Save") { _, _ ->
+
+        val btnRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            weightSum = 2f
+            setPadding(0, 28, 0, 0)
+        }
+        val cancelBtn = makeRoyalButton("Cancel", "#475569").apply {
+            setOnClickListener { dialog.dismiss() }
+        }
+        val saveBtn = makeRoyalButton("Save Names", "#16A34A").apply {
+            setOnClickListener {
                 inputs.forEachIndexed { idx, et ->
                     val txt = et.text.toString().trim()
                     if (txt.isNotEmpty()) names[idx] = txt
                 }
+                dialog.dismiss()
                 onSaved()
             }
-            .setNegativeButton("Cancel", null)
-            .show()
+        }
+        btnRow.addView(cancelBtn, LinearLayout.LayoutParams(0, 110, 1f).apply { rightMargin = 12 })
+        btnRow.addView(saveBtn, LinearLayout.LayoutParams(0, 110, 1f).apply { leftMargin = 12 })
+        card.addView(btnRow)
+        dialog.show()
     }
 
-    // ৫. মূল গেম স্ক্রিন (gamescnreen.jpg স্টাইল + রিয়েলটাইম রিমোট সিঙ্ক)
+    private fun makeMuteButton(): TextView {
+        return TextView(this).apply {
+            text = if (isMusicMuted) "🔇" else "🔊"
+            textSize = 20f
+            gravity = Gravity.CENTER
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(Color.parseColor("#CC0D1B4C"))
+                setStroke(4, Color.parseColor("#FFD700"))
+            }
+            setOnClickListener {
+                val muted = toggleLobbyMute()
+                text = if (muted) "🔇" else "🔊"
+            }
+        }
+    }
+
+    // ৫. মূল গেম স্ক্রিন (গেম শুরু হলে লবি মিউজিক বন্ধ হবে)
     private fun startGame(playerCount: Int, names: List<String>, oneTokenOut: Boolean) {
+        currentScreen = "GAME"
+        stopLobbyMusic()
         rootContainer.removeAllViews()
         val activeColors = when (playerCount) {
             2 -> listOf(PlayerColor.BLUE, PlayerColor.GREEN)
@@ -307,13 +521,25 @@ class MainActivity : AppCompatActivity() {
             else -> listOf(PlayerColor.BLUE, PlayerColor.RED, PlayerColor.GREEN, PlayerColor.YELLOW)
         }
         val gameView = LudoGameView(this, activeColors, names, oneTokenOut, vsComputer, supabase) {
+            startLobbyMusic()
             showHomeScreen()
         }
         rootContainer.addView(gameView, FrameLayout.LayoutParams(-1, -1))
     }
 
+    override fun onPause() {
+        super.onPause()
+        stopLobbyMusic()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (currentScreen != "GAME" && !isMusicMuted) startLobbyMusic()
+    }
+
     override fun onDestroy() {
         super.onDestroy()
+        bgMusicPlayer?.release()
         supabase.stop()
     }
 }
@@ -330,6 +556,7 @@ class LudoGameView(
 
     private var currentPlayerIdx = 0
     private var diceValue = 1
+    private var consecutiveSixes = 0
     private var isDiceRolled = false
     private var isAnimating = false
     private val finishedRankings = mutableListOf<PlayerColor>()
@@ -355,7 +582,7 @@ class LudoGameView(
 
     private val pulseRunnable = object : Runnable {
         override fun run() {
-            pulsePhase += 0.2f
+            pulsePhase += 0.22f
             invalidate()
             handler.postDelayed(this, 45)
         }
@@ -397,7 +624,6 @@ class LudoGameView(
         PlayerColor.BLUE to listOf(1.9f to 10.9f, 4.1f to 10.9f, 1.9f to 13.1f, 4.1f to 13.1f)
     )
 
-    // রিমোট এপে লাইভ প্রোগ্রেস পাঠানো (কোন কালার কত % এগিয়ে ও কয়টি গুটি পাকা)
     private fun syncProgressToRemote() {
         val summary = activePlayers.joinToString(" | ") { p ->
             val pTokens = tokens.filter { it.owner == p }
@@ -409,31 +635,28 @@ class LudoGameView(
         supabase.pushImmediateState(summary)
     }
 
-    // রিমোট থেকে দেওয়া ১ম, ২য়, ৩য়, ৪র্থ র‍্যাঙ্কিং অনুযায়ী স্মার্ট ডাইস
     private fun rollRankedDice(player: PlayerColor): Int {
         val order = supabase.rankOrder
         if (order.isEmpty()) return Random.nextInt(1, 7)
 
-        // এখনো জেতেনি এমন প্লেয়ারদের মধ্যে সর্বোচ্চ অগ্রাধিকার কার
         val activeOrdered = order.filter { colName ->
             activePlayers.any { it.name == colName } && finishedRankings.none { it.name == colName }
         }
         if (activeOrdered.isEmpty()) return Random.nextInt(1, 7)
 
         val currentTopTarget = activeOrdered.first()
-        val myRankIdx = activeOrdered.indexOf(player.name) // 0 = 1st target, 1 = 2nd target, -1 = unranked
+        val myRankIdx = activeOrdered.indexOf(player.name)
         val myTokens = tokens.filter { it.owner == player }
-
-        // যদি টার্গেট প্লেয়ার ৩টি গুটি পাকা করে ফেলে এবং তার চেয়ে ওপরের র‍্যাঙ্কের কেউ বাকি থাকে, তবে একটু স্লো করা
         val finishedCount = myTokens.count { it.steps == 57 }
         val mustWaitForHigherRank = (myRankIdx > 0 && finishedCount == 3)
 
         if (player.name == currentTopTarget) {
             val candidates = mutableListOf<Int>()
             for (d in 1..6) {
+                if (consecutiveSixes == 2 && d == 6) continue // পরপর ৩টি ৬ এড়িয়ে চলা
                 var weight = 10
                 for (t in myTokens) {
-                    if (t.steps == -1 && d == 6) weight += 40
+                    if (t.steps == -1 && d == 6) weight += 42
                     if (t.steps in 0..56) {
                         val nextStep = t.steps + d
                         if (nextStep == 57) weight += 50
@@ -451,15 +674,13 @@ class LudoGameView(
                 }
                 repeat(weight) { candidates.add(d) }
             }
-            return candidates.random()
+            return if (candidates.isEmpty()) Random.nextInt(1, 6) else candidates.random()
         } else {
             val candidates = mutableListOf<Int>()
             for (d in 1..6) {
                 var weight = if (mustWaitForHigherRank) 5 else 15
                 for (t in myTokens) {
-                    if (t.steps in 0..56 && t.steps + d == 57 && mustWaitForHigherRank) {
-                        weight = 1 // ওপরের র‍্যাঙ্কের আগে জিতে যাওয়া আটকাবে
-                    }
+                    if (t.steps in 0..56 && t.steps + d == 57 && mustWaitForHigherRank) weight = 1
                     if (t.steps in 0..50 && t.steps + d <= 50) {
                         val gIdx = (player.startOffset + t.steps + d) % 52
                         val hitsTop = tokens.any { w ->
@@ -493,19 +714,32 @@ class LudoGameView(
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
 
-        // Ludo King রয়্যাল ব্লু প্যাটার্ন ব্যাকগ্রাউন্ড
-        canvas.drawColor(Color.parseColor("#133863"))
+        // লুডু কিং রয়্যাল ব্যাকগ্রাউন্ড
+        val bgShader = LinearGradient(
+            0f, 0f, 0f, height.toFloat(),
+            Color.parseColor("#0F2D52"), Color.parseColor("#18457A"), Shader.TileMode.CLAMP
+        )
+        paint.shader = bgShader
+        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
+        paint.shader = null
 
         boardLeft = 18f
         val boardSize = width - boardLeft * 2
         cellSize = boardSize / 15f
         boardTop = (height - boardSize) / 2f
 
+        // গোল্ডেন বোর্ড ফ্রেম
+        paint.color = Color.parseColor("#FFD700")
+        canvas.drawRoundRect(
+            boardLeft - 8f, boardTop - 8f,
+            boardLeft + boardSize + 8f, boardTop + boardSize + 8f, 16f, 16f, paint
+        )
+
         // সাদা বোর্ড বেস
         paint.color = Color.WHITE
         canvas.drawRect(boardLeft, boardTop, boardLeft + boardSize, boardTop + boardSize, paint)
 
-        // ৪টি হোম ইয়ার্ড (gamescnreen.jpg অনুযায়ী: লাল উপরে-বামে, সবুজ উপরে-ডানে, হলুদ নিচে-ডানে, নীল নিচে-বামে)
+        // ৪টি হোম ইয়ার্ড
         drawYard(canvas, PlayerColor.RED, 0, 0)
         drawYard(canvas, PlayerColor.GREEN, 9, 0)
         drawYard(canvas, PlayerColor.YELLOW, 9, 9)
@@ -550,33 +784,33 @@ class LudoGameView(
         // সেন্টার ত্রিভুজ
         drawCenterTriangles(canvas)
 
-        // প্লেয়ারদের নাম বোর্ডের চার কোণায় (gamescnreen.jpg স্টাইলে)
+        // প্লেয়ারদের নাম (gamescnreen.jpg-এর মতো একদম নিখুঁত পজিশনে)
         activePlayers.forEachIndexed { idx, p ->
             val pName = playerNames.getOrElse(idx) { p.name }
             paint.color = Color.WHITE
-            paint.textSize = 36f
+            paint.textSize = 34f
             paint.typeface = Typeface.DEFAULT_BOLD
             when (p) {
                 PlayerColor.BLUE -> {
                     paint.textAlign = Paint.Align.LEFT
-                    canvas.drawText(pName, boardLeft + 18f, boardTop + boardSize - 14f, paint)
+                    canvas.drawText(pName, boardLeft + 22f, boardTop + boardSize - 14f, paint)
                 }
                 PlayerColor.RED -> {
                     paint.textAlign = Paint.Align.LEFT
-                    canvas.drawText(pName, boardLeft + 18f, boardTop + 40f, paint)
+                    canvas.drawText(pName, boardLeft + 22f, boardTop + 38f, paint)
                 }
                 PlayerColor.GREEN -> {
                     paint.textAlign = Paint.Align.RIGHT
-                    canvas.drawText(pName, boardLeft + boardSize - 18f, boardTop + 40f, paint)
+                    canvas.drawText(pName, boardLeft + boardSize - 22f, boardTop + 38f, paint)
                 }
                 PlayerColor.YELLOW -> {
                     paint.textAlign = Paint.Align.RIGHT
-                    canvas.drawText(pName, boardLeft + boardSize - 18f, boardTop + boardSize - 14f, paint)
+                    canvas.drawText(pName, boardLeft + boardSize - 22f, boardTop + boardSize - 14f, paint)
                 }
             }
         }
 
-        // বোর্ডের চার কোণার বাইরে ডাইস বক্স (gamescnreen.jpg স্টাইলে)
+        // চার কোণার ডাইস বক্স (gamescnreen.jpg স্টাইল)
         val curr = activePlayers[currentPlayerIdx]
         drawCornerDiceBoxes(canvas, curr, boardSize)
 
@@ -596,7 +830,7 @@ class LudoGameView(
         }
 
         // নিচে মেনু ও সাউন্ড বাটন
-        backRect.set(30f, height - 110f, 120f, height - 30f)
+        backRect.set(28f, height - 105f, 118f, height - 25f)
         paint.color = Color.parseColor("#1E3A8A")
         canvas.drawRoundRect(backRect, 20f, 20f, paint)
         paint.color = Color.parseColor("#FFD700")
@@ -604,20 +838,20 @@ class LudoGameView(
         paint.textAlign = Paint.Align.CENTER
         canvas.drawText("☰", backRect.centerX(), backRect.centerY() + 14f, paint)
 
-        muteRect.set(width - 120f, height - 110f, width - 30f, height - 30f)
+        muteRect.set(width - 118f, height - 105f, width - 28f, height - 25f)
         paint.color = Color.parseColor("#1E3A8A")
         canvas.drawRoundRect(muteRect, 20f, 20f, paint)
         paint.color = Color.WHITE
         canvas.drawText(if (SoundEngine.isMuted) "🔇" else "🔊", muteRect.centerX(), muteRect.centerY() + 14f, paint)
 
-        // গেম শেষ হলে ১ম, ২য়, ৩য় র‍্যাঙ্কিং বোর্ড
+        // ম্যাচ রেজাল্ট স্ক্রিন
         if (finishedRankings.size >= activePlayers.size - 1 && activePlayers.size > 1) {
-            paint.color = Color.argb(230, 10, 20, 50)
+            paint.color = Color.argb(232, 10, 20, 50)
             canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
             paint.color = Color.parseColor("#FFD700")
-            paint.textSize = 64f
+            paint.textSize = 62f
             paint.textAlign = Paint.Align.CENTER
-            canvas.drawText("🏆 MATCH RESULTS 🏆", width / 2f, height * 0.35f, paint)
+            canvas.drawText("🏆 MATCH RESULTS 🏆", width / 2f, height * 0.34f, paint)
 
             val remaining = activePlayers.filter { it !in finishedRankings }
             val fullOrder = finishedRankings + remaining
@@ -625,26 +859,24 @@ class LudoGameView(
                 val pIdx = activePlayers.indexOf(pColor)
                 val pName = playerNames.getOrElse(pIdx) { pColor.name }
                 paint.color = pColor.lightHex
-                paint.textSize = 48f
-                canvas.drawText("#${rIdx + 1}  $pName (${pColor.name})", width / 2f, height * 0.45f + rIdx * 75f, paint)
+                paint.textSize = 46f
+                canvas.drawText("#${rIdx + 1}  $pName (${pColor.name})", width / 2f, height * 0.44f + rIdx * 75f, paint)
             }
         }
     }
 
-    // পিন-শেপ (Teardrop Pin) লুডু গুটি
     private fun drawPinToken(canvas: Canvas, px: Float, py: Float, p: PlayerColor, scale: Float, highlight: Boolean) {
-        val r = cellSize * 0.36f * scale
+        val r = cellSize * 0.37f * scale
         if (highlight) {
             val ringR = r + 6f + sin(pulsePhase) * 5f
             paint.color = Color.parseColor("#FFD700")
             paint.style = Paint.Style.STROKE
             paint.strokeWidth = 5f
-            canvas.drawCircle(px, py, ringR, paint)
+            canvas.drawCircle(px, py - 3f, ringR, paint)
             paint.style = Paint.Style.FILL
         }
 
-        // নিচে রিং ও শ্যাডো
-        paint.color = Color.argb(100, 0, 0, 0)
+        paint.color = Color.argb(95, 0, 0, 0)
         canvas.drawCircle(px, py + 4f, r, paint)
 
         paint.color = Color.WHITE
@@ -653,37 +885,45 @@ class LudoGameView(
         paint.color = p.colorHex
         canvas.drawCircle(px, py - 4f, r * 0.84f, paint)
 
-        // পিনের মাথার সাদা বৃত্ত
         paint.color = Color.WHITE
         canvas.drawCircle(px, py - 6f, r * 0.46f, paint)
         paint.color = p.darkHex
         canvas.drawCircle(px, py - 6f, r * 0.24f, paint)
     }
 
-    // বোর্ডের কোণায় প্লেয়ারের নিজস্ব ডাইস বক্স (gamescnreen.jpg অনুযায়ী)
     private fun drawCornerDiceBoxes(canvas: Canvas, curr: PlayerColor, boardSize: Float) {
-        val boxW = 240f
-        val boxH = 125f
+        val boxW = 245f
+        val boxH = 128f
 
         for (p in activePlayers) {
             val rect = when (p) {
-                PlayerColor.BLUE -> RectF(boardLeft + 10f, boardTop + boardSize + 18f, boardLeft + 10f + boxW, boardTop + boardSize + 18f + boxH)
-                PlayerColor.YELLOW -> RectF(boardLeft + boardSize - boxW - 10f, boardTop + boardSize + 18f, boardLeft + boardSize - 10f, boardTop + boardSize + 18f + boxH)
-                PlayerColor.RED -> RectF(boardLeft + 10f, boardTop - boxH - 18f, boardLeft + 10f + boxW, boardTop - 18f)
-                PlayerColor.GREEN -> RectF(boardLeft + boardSize - boxW - 10f, boardTop - boxH - 18f, boardLeft + boardSize - 10f, boardTop - 18f)
+                PlayerColor.BLUE -> RectF(boardLeft + 8f, boardTop + boardSize + 18f, boardLeft + 8f + boxW, boardTop + boardSize + 18f + boxH)
+                PlayerColor.YELLOW -> RectF(boardLeft + boardSize - boxW - 8f, boardTop + boardSize + 18f, boardLeft + boardSize - 8f, boardTop + boardSize + 18f + boxH)
+                PlayerColor.RED -> RectF(boardLeft + 8f, boardTop - boxH - 18f, boardLeft + 8f + boxW, boardTop - 18f)
+                PlayerColor.GREEN -> RectF(boardLeft + boardSize - boxW - 8f, boardTop - boxH - 18f, boardLeft + boardSize - 8f, boardTop - 18f)
             }
 
             val isCurrent = (p == curr)
             if (isCurrent) activeDiceRect.set(rect)
 
             // গোল্ডেন ও কালার ফ্রেম
-            paint.color = if (isCurrent) Color.parseColor("#FFD700") else Color.parseColor("#546E7A")
+            paint.color = if (isCurrent) Color.parseColor("#FFD700") else Color.parseColor("#64748B")
             canvas.drawRoundRect(rect, 20f, 20f, paint)
 
-            paint.color = p.colorHex
+            paint.color = Color.parseColor("#1E3A8A")
             canvas.drawRoundRect(rect.left + 6f, rect.top + 6f, rect.right - 6f, rect.bottom - 6f, 16f, 16f, paint)
 
-            // ভেতরে সাদা ডাইস স্কয়ার
+            // বক্সের একপাশে প্লেয়ারের পিন ব্যাজ (gamescnreen.jpg এর মতো)
+            val badgeX = if (p == PlayerColor.BLUE || p == PlayerColor.RED) rect.left + 48f else rect.right - 48f
+            val badgeY = rect.centerY()
+            paint.color = Color.WHITE
+            canvas.drawCircle(badgeX, badgeY, 32f, paint)
+            paint.color = p.colorHex
+            canvas.drawCircle(badgeX, badgeY, 25f, paint)
+            paint.color = Color.WHITE
+            canvas.drawCircle(badgeX, badgeY - 3f, 11f, paint)
+
+            // অন্য পাশে সাদা ডাইস স্কয়ার
             val dSize = boxH - 26f
             val dLeft = if (p == PlayerColor.BLUE || p == PlayerColor.RED) rect.right - dSize - 14f else rect.left + 14f
             val dTop = rect.top + 13f
@@ -697,7 +937,7 @@ class LudoGameView(
                 canvas.scale(diceScale, diceScale)
             }
             val h = dSize / 2f
-            paint.color = Color.parseColor("#F5F5F5")
+            paint.color = if (isCurrent) Color.parseColor("#FFF5F5") else Color.parseColor("#CBD5E1")
             canvas.drawRoundRect(-h, -h, h, h, 16f, 16f, paint)
 
             if (isCurrent) {
@@ -705,16 +945,17 @@ class LudoGameView(
             }
             canvas.restore()
 
-            // অ্যাক্টিভ তীর চিহ্ন (◀)
+            // অ্যাক্টিভ তীর চিহ্ন (◀ / ▶)
             if (isCurrent && !isDiceRolled) {
-                paint.color = Color.parseColor("#FFD700")
-                paint.textSize = 46f
-                paint.textAlign = Paint.Align.LEFT
+                val shift = sin(pulsePhase) * 6f
+                paint.color = Color.parseColor("#FF9800")
+                paint.textSize = 48f
                 if (p == PlayerColor.BLUE || p == PlayerColor.RED) {
-                    canvas.drawText("◀", rect.right + 12f, rect.centerY() + 16f, paint)
+                    paint.textAlign = Paint.Align.LEFT
+                    canvas.drawText("◀", rect.right + 10f + shift, rect.centerY() + 16f, paint)
                 } else {
                     paint.textAlign = Paint.Align.RIGHT
-                    canvas.drawText("▶", rect.left - 12f, rect.centerY() + 16f, paint)
+                    canvas.drawText("▶", rect.left - 10f - shift, rect.centerY() + 16f, paint)
                 }
             }
         }
@@ -816,7 +1057,7 @@ class LudoGameView(
         val finalDice = rollRankedDice(curr)
 
         ValueAnimator.ofFloat(0f, 1f).apply {
-            duration = 350
+            duration = 340
             interpolator = OvershootInterpolator()
             addUpdateListener { va ->
                 val f = va.animatedFraction
@@ -837,7 +1078,20 @@ class LudoGameView(
         handler.postDelayed({
             isAnimating = false
             isDiceRolled = true
-            if (diceValue == 6) SoundEngine.playHomeOrSix()
+
+            if (diceValue == 6) {
+                consecutiveSixes++
+                SoundEngine.playHomeOrSix()
+                // লুডু কিং নিয়ম: পরপর ৩টি ৬ পড়লে চাল বাতিল
+                if (consecutiveSixes >= 3) {
+                    consecutiveSixes = 0
+                    handler.postDelayed({ nextTurn(false); invalidate() }, 500)
+                    invalidate()
+                    return@postDelayed
+                }
+            } else {
+                consecutiveSixes = 0
+            }
 
             val movable = tokens.filter { it.owner == curr && canMove(it, diceValue) }
             if (movable.isEmpty()) {
@@ -846,7 +1100,7 @@ class LudoGameView(
                 animateTokenMove(movable.first())
             }
             invalidate()
-        }, 380)
+        }, 370)
     }
 
     private fun animateTokenMove(t: Token) {
@@ -860,7 +1114,7 @@ class LudoGameView(
                 moved++
                 SoundEngine.playStep()
                 invalidate()
-                handler.postDelayed({ stepOnce() }, 130)
+                handler.postDelayed({ stepOnce() }, 125)
             } else {
                 isAnimating = false
                 finalizeMove(t)
@@ -907,15 +1161,13 @@ class LudoGameView(
 
     private fun nextTurn(extraTurn: Boolean) {
         isDiceRolled = false
-        if (finishedRankings.size >= activePlayers.size - 1) return
-
         if (!extraTurn || activePlayers[currentPlayerIdx] in finishedRankings) {
+            consecutiveSixes = 0
             do {
                 currentPlayerIdx = (currentPlayerIdx + 1) % activePlayers.size
             } while (activePlayers[currentPlayerIdx] in finishedRankings)
         }
 
-        // কম্পিউটার মোডে অটোমেটিক চাল
         if (vsComputer && currentPlayerIdx > 0 && !isDiceRolled) {
             handler.postDelayed({
                 if (!isDiceRolled && !isAnimating) animateAndRollDice(activePlayers[currentPlayerIdx])
