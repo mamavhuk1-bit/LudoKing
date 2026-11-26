@@ -21,7 +21,7 @@ import kotlin.random.Random
 
 enum class PlayerColor(val colorHex: Int, val lightHex: Int, val darkHex: Int, val startOffset: Int) {
     RED(Color.parseColor("#E53935"), Color.parseColor("#FF8A80"), Color.parseColor("#8E0000"), 0),
-    GREEN(Color.parseColor("#43A047"), Color.parseColor("#B9F6CA"), Color.parseColor("#005005"), 13),
+    GREEN(Color.parseColor("#2E9E44"), Color.parseColor("#B9F6CA"), Color.parseColor("#005005"), 13),
     YELLOW(Color.parseColor("#FBC02D"), Color.parseColor("#FFFF8D"), Color.parseColor("#C49000"), 26),
     BLUE(Color.parseColor("#1E88E5"), Color.parseColor("#82B1FF"), Color.parseColor("#003C8F"), 39)
 }
@@ -76,9 +76,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun stopLobbyMusic() {
         try {
-            if (bgMusicPlayer?.isPlaying == true) {
-                bgMusicPlayer?.pause()
-            }
+            if (bgMusicPlayer?.isPlaying == true) bgMusicPlayer?.pause()
         } catch (_: Exception) {}
     }
 
@@ -181,12 +179,8 @@ class MainActivity : AppCompatActivity() {
             orientation = LinearLayout.HORIZONTAL
             weightSum = 2f
         }
-        val noBtn = makeRoyalButton("Cancel", "#334155").apply {
-            setOnClickListener { dialog.dismiss() }
-        }
-        val yesBtn = makeRoyalButton("Confirm", "#16A34A").apply {
-            setOnClickListener { dialog.dismiss(); onYes() }
-        }
+        val noBtn = makeRoyalButton("Cancel", "#334155").apply { setOnClickListener { dialog.dismiss() } }
+        val yesBtn = makeRoyalButton("Confirm", "#16A34A").apply { setOnClickListener { dialog.dismiss(); onYes() } }
         row.addView(noBtn, LinearLayout.LayoutParams(0, 110, 1f).apply { rightMargin = 12 })
         row.addView(yesBtn, LinearLayout.LayoutParams(0, 110, 1f).apply { leftMargin = 12 })
         card.addView(row)
@@ -203,10 +197,7 @@ class MainActivity : AppCompatActivity() {
             setPadding(0, 0, 0, 32)
         }
         card.addView(body)
-
-        val okBtn = makeRoyalButton("OK", "#E53935").apply {
-            setOnClickListener { dialog.dismiss() }
-        }
+        val okBtn = makeRoyalButton("OK", "#E53935").apply { setOnClickListener { dialog.dismiss() } }
         card.addView(okBtn, LinearLayout.LayoutParams(-1, 110))
         dialog.show()
     }
@@ -219,9 +210,7 @@ class MainActivity : AppCompatActivity() {
             scaleType = ImageView.ScaleType.FIT_XY
         }
         rootContainer.addView(iv, FrameLayout.LayoutParams(-1, -1))
-        Handler(Looper.getMainLooper()).postDelayed({
-            showHomeScreen()
-        }, 2200)
+        Handler(Looper.getMainLooper()).postDelayed({ showHomeScreen() }, 2200)
     }
 
     private fun showHomeScreen() {
@@ -260,8 +249,7 @@ class MainActivity : AppCompatActivity() {
         }
         frame.addView(animOverlay, FrameLayout.LayoutParams(-1, -1))
 
-        val muteBtn = makeMuteButton()
-        frame.addView(muteBtn, FrameLayout.LayoutParams(110, 110).apply {
+        frame.addView(makeMuteButton(), FrameLayout.LayoutParams(110, 110).apply {
             gravity = Gravity.TOP or Gravity.END
             topMargin = 110; rightMargin = 24
         })
@@ -272,14 +260,10 @@ class MainActivity : AppCompatActivity() {
                 val ny = ev.y / v.height
                 when {
                     nx in 0.19f..0.48f && ny in 0.53f..0.65f -> {
-                        SoundEngine.playStep()
-                        vsComputer = true
-                        showAfterPassScreen()
+                        SoundEngine.playStep(); vsComputer = true; showAfterPassScreen()
                     }
                     nx in 0.52f..0.81f && ny in 0.53f..0.65f -> {
-                        SoundEngine.playStep()
-                        vsComputer = false
-                        showAfterPassScreen()
+                        SoundEngine.playStep(); vsComputer = false; showAfterPassScreen()
                     }
                     else -> showServerError()
                 }
@@ -334,14 +318,8 @@ class MainActivity : AppCompatActivity() {
                     ny in 0.45f..0.54f -> { selectedMode = 0; SoundEngine.playStep(); modeIndicator.invalidate() }
                     ny in 0.56f..0.65f -> { selectedMode = 1; SoundEngine.playStep(); modeIndicator.invalidate() }
                     ny in 0.66f..0.74f -> { selectedMode = 2; SoundEngine.playStep(); modeIndicator.invalidate() }
-                    nx in 0.30f..0.70f && ny in 0.74f..0.83f -> {
-                        SoundEngine.playStep()
-                        showAfterNextScreen()
-                    }
-                    nx in 0.02f..0.18f && ny in 0.88f..0.97f -> {
-                        SoundEngine.playStep()
-                        showHomeScreen()
-                    }
+                    nx in 0.30f..0.70f && ny in 0.74f..0.83f -> { SoundEngine.playStep(); showAfterNextScreen() }
+                    nx in 0.02f..0.18f && ny in 0.88f..0.97f -> { SoundEngine.playStep(); showHomeScreen() }
                 }
             }
             true
@@ -352,83 +330,238 @@ class MainActivity : AppCompatActivity() {
     private fun showAfterNextScreen() {
         currentScreen = "AFTER_NEXT"
         rootContainer.removeAllViews()
-        val frame = FrameLayout(this)
-        val bg = ImageView(this).apply {
-            setImageResource(R.drawable.screen_afternext)
-            scaleType = ImageView.ScaleType.FIT_XY
+
+        val root = FrameLayout(this).apply {
+            setBackgroundColor(Color.parseColor("#081636"))
         }
-        frame.addView(bg, FrameLayout.LayoutParams(-1, -1))
+
+        val dimBg = ImageView(this).apply {
+            setImageResource(R.drawable.screen_home)
+            scaleType = ImageView.ScaleType.FIT_XY
+            alpha = 0.22f
+        }
+        root.addView(dimBg, FrameLayout.LayoutParams(-1, -1))
 
         var playerCount = 2
         val playerNames = mutableListOf("Player 1", "Player 2", "Player 3", "Player 4")
+        val badgeHexes = listOf("#1E88E5", "#2E9E44", "#E53935", "#FBC02D")
 
-        val setupOverlay = object : View(this) {
-            val p = Paint(Paint.ANTI_ALIAS_FLAG)
-            override fun onDraw(canvas: Canvas) {
-                val pxPositions = mapOf(2 to 0.184f, 3 to 0.340f, 4 to 0.496f)
-                val ringY = height * 0.583f
-                val ringR = width * 0.062f
-
-                pxPositions.forEach { (cnt, rx) ->
-                    if (cnt == playerCount) {
-                        p.style = Paint.Style.STROKE
-                        p.strokeWidth = 9f
-                        p.color = Color.parseColor("#00E676")
-                        canvas.drawCircle(width * rx, ringY, ringR, p)
-                        p.style = Paint.Style.FILL
-                    }
-                }
-
-                p.color = Color.parseColor("#FFD700")
-                p.textSize = 32f
-                p.textAlign = Paint.Align.CENTER
-                p.typeface = Typeface.DEFAULT_BOLD
-                val activeList = playerNames.take(playerCount).joinToString("  •  ")
-                canvas.drawText(activeList, width * 0.50f, height * 0.372f, p)
+        val mainCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(36, 36, 36, 36)
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(Color.parseColor("#0E3A85"), Color.parseColor("#072154"))
+            ).apply {
+                cornerRadius = 32f
+                setStroke(6, Color.parseColor("#FFD700"))
             }
         }
-        frame.addView(setupOverlay, FrameLayout.LayoutParams(-1, -1))
 
-        frame.addView(makeMuteButton(), FrameLayout.LayoutParams(110, 110).apply {
-            gravity = Gravity.TOP or Gravity.END
-            topMargin = 110; rightMargin = 24
+        val headerTitle = TextView(this).apply {
+            text = "CHOOSE COLOR AND NAME"
+            textSize = 18f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.parseColor("#FFD700"))
+            gravity = Gravity.CENTER
+            setPadding(0, 0, 0, 24)
+        }
+        mainCard.addView(headerTitle)
+
+        val playersBox = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(24, 20, 24, 20)
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#1554B8"))
+                cornerRadius = 22f
+                setStroke(3, Color.parseColor("#38BDF8"))
+            }
+        }
+        mainCard.addView(playersBox, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = 28 })
+
+        fun rebuildPlayerRows() {
+            playersBox.removeAllViews()
+            val outerRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+
+            val greenCheck = TextView(this).apply {
+                text = "✔"
+                textSize = 24f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(Color.WHITE)
+                gravity = Gravity.CENTER
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(Color.parseColor("#22C55E"))
+                    setStroke(6, Color.WHITE)
+                }
+            }
+            outerRow.addView(greenCheck, LinearLayout.LayoutParams(95, 95).apply { rightMargin = 24 })
+
+            val listCol = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+            }
+
+            for (i in 0 until playerCount) {
+                val pRow = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(0, 8, 0, 8)
+                }
+
+                val pinDot = View(this).apply {
+                    background = GradientDrawable().apply {
+                        shape = GradientDrawable.OVAL
+                        setColor(Color.parseColor(badgeHexes[i]))
+                        setStroke(5, Color.WHITE)
+                    }
+                }
+                pRow.addView(pinDot, LinearLayout.LayoutParams(48, 48).apply { rightMargin = 16 })
+
+                val namePill = TextView(this).apply {
+                    text = playerNames[i]
+                    textSize = 15f
+                    typeface = Typeface.DEFAULT_BOLD
+                    setTextColor(Color.parseColor("#0F172A"))
+                    setPadding(24, 14, 24, 14)
+                    background = GradientDrawable().apply {
+                        setColor(Color.WHITE)
+                        cornerRadius = 14f
+                        setStroke(3, Color.parseColor("#94A3B8"))
+                    }
+                    setOnClickListener {
+                        promptRoyalEditNames(playerCount, playerNames) { rebuildPlayerRows() }
+                    }
+                }
+                pRow.addView(namePill, LinearLayout.LayoutParams(0, -2, 1f).apply { rightMargin = 14 })
+
+                val diceIcon = TextView(this).apply {
+                    text = "🎲"
+                    textSize = 22f
+                }
+                pRow.addView(diceIcon)
+
+                listCol.addView(pRow)
+            }
+            outerRow.addView(listCol, LinearLayout.LayoutParams(-1, -2))
+            playersBox.addView(outerRow)
+        }
+        rebuildPlayerRows()
+
+        val countRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+        }
+        val countButtons = mutableMapOf<Int, TextView>()
+
+        fun updateCountRings() {
+            countButtons.forEach { (cnt, tv) ->
+                val isSelected = (cnt == playerCount)
+                tv.background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(if (isSelected) Color.parseColor("#166534") else Color.parseColor("#0B2A66"))
+                    setStroke(if (isSelected) 10 else 6, if (isSelected) Color.parseColor("#00E676") else Color.parseColor("#F59E0B"))
+                }
+            }
+        }
+
+        for (cnt in listOf(2, 3, 4)) {
+            val btn = TextView(this).apply {
+                text = "${cnt}P"
+                textSize = 18f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(Color.WHITE)
+                gravity = Gravity.CENTER
+                setOnClickListener {
+                    playerCount = cnt
+                    SoundEngine.playStep()
+                    updateCountRings()
+                    rebuildPlayerRows()
+                }
+            }
+            countButtons[cnt] = btn
+            countRow.addView(btn, LinearLayout.LayoutParams(130, 130).apply {
+                leftMargin = 20; rightMargin = 20
+            })
+        }
+        updateCountRings()
+        mainCard.addView(countRow, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = 32 })
+
+        val playBtn = Button(this).apply {
+            text = "Play"
+            textSize = 20f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+            isAllCaps = false
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(Color.parseColor("#2563EB"), Color.parseColor("#1D4ED8"))
+            ).apply {
+                cornerRadius = 40f
+                setStroke(6, Color.parseColor("#FBBF24"))
+            }
+            setOnClickListener {
+                startGame(playerCount, playerNames.take(playerCount), oneTokenOut = false)
+            }
+        }
+        mainCard.addView(playBtn, LinearLayout.LayoutParams(460, 115).apply { bottomMargin = 20 })
+
+        val playOneOutBtn = Button(this).apply {
+            text = "Play\n- One Token Out -"
+            textSize = 16f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+            isAllCaps = false
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(Color.parseColor("#2563EB"), Color.parseColor("#1E40AF"))
+            ).apply {
+                cornerRadius = 36f
+                setStroke(6, Color.parseColor("#FBBF24"))
+            }
+            setOnClickListener {
+                startGame(playerCount, playerNames.take(playerCount), oneTokenOut = true)
+            }
+        }
+        mainCard.addView(playOneOutBtn, LinearLayout.LayoutParams(460, 135))
+
+        root.addView(mainCard, FrameLayout.LayoutParams(-1, -2).apply {
+            gravity = Gravity.CENTER
+            leftMargin = 32; rightMargin = 32
         })
 
-        frame.setOnTouchListener { v, ev ->
-            if (ev.action == MotionEvent.ACTION_DOWN) {
-                val nx = ev.x / v.width
-                val ny = ev.y / v.height
-                when {
-                    ny in 0.53f..0.63f && nx in 0.11f..0.25f -> { playerCount = 2; SoundEngine.playStep(); setupOverlay.invalidate() }
-                    ny in 0.53f..0.63f && nx in 0.27f..0.41f -> { playerCount = 3; SoundEngine.playStep(); setupOverlay.invalidate() }
-                    ny in 0.53f..0.63f && nx in 0.43f..0.57f -> { playerCount = 4; SoundEngine.playStep(); setupOverlay.invalidate() }
-
-                    ny in 0.39f..0.52f && nx in 0.38f..0.78f -> {
-                        promptRoyalEditNames(playerCount, playerNames) { setupOverlay.invalidate() }
-                    }
-
-                    nx in 0.32f..0.68f && ny in 0.64f..0.71f -> {
-                        startGame(playerCount, playerNames.take(playerCount), oneTokenOut = false)
-                    }
-
-                    nx in 0.32f..0.68f && ny in 0.72f..0.81f -> {
-                        startGame(playerCount, playerNames.take(playerCount), oneTokenOut = true)
-                    }
-
-                    nx in 0.02f..0.18f && ny in 0.88f..0.97f -> {
-                        SoundEngine.playStep()
-                        showAfterPassScreen()
-                    }
-                }
+        val backBtn = TextView(this).apply {
+            text = "↩"
+            textSize = 24f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(Color.parseColor("#1E3A8A"))
+                setStroke(6, Color.parseColor("#FBBF24"))
             }
-            true
+            setOnClickListener { SoundEngine.playStep(); showAfterPassScreen() }
         }
-        rootContainer.addView(frame, FrameLayout.LayoutParams(-1, -1))
+        root.addView(backBtn, FrameLayout.LayoutParams(115, 115).apply {
+            gravity = Gravity.BOTTOM or Gravity.START
+            bottomMargin = 36; leftMargin = 36
+        })
+
+        root.addView(makeMuteButton(), FrameLayout.LayoutParams(110, 110).apply {
+            gravity = Gravity.TOP or Gravity.END
+            topMargin = 36; rightMargin = 28
+        })
+
+        rootContainer.addView(root, FrameLayout.LayoutParams(-1, -1))
     }
 
     private fun promptRoyalEditNames(count: Int, names: MutableList<String>, onSaved: () -> Unit) {
         val (dialog, card) = createRoyalDialog("✏ EDIT PLAYER NAMES")
-        val badgeColors = listOf("#1E88E5", "#43A047", "#E53935", "#FBC02D")
+        val badgeColors = listOf("#1E88E5", "#2E9E44", "#E53935", "#FBC02D")
 
         val inputs = (0 until count).map { idx ->
             val row = LinearLayout(this).apply {
@@ -468,9 +601,7 @@ class MainActivity : AppCompatActivity() {
             weightSum = 2f
             setPadding(0, 28, 0, 0)
         }
-        val cancelBtn = makeRoyalButton("Cancel", "#475569").apply {
-            setOnClickListener { dialog.dismiss() }
-        }
+        val cancelBtn = makeRoyalButton("Cancel", "#475569").apply { setOnClickListener { dialog.dismiss() } }
         val saveBtn = makeRoyalButton("Save Names", "#16A34A").apply {
             setOnClickListener {
                 inputs.forEachIndexed { idx, et ->
@@ -504,7 +635,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ৫. মূল গেম স্ক্রিন + GAME STARTED ব্যানার + start.mp3 সাউন্ড
     private fun startGame(playerCount: Int, names: List<String>, oneTokenOut: Boolean) {
         currentScreen = "GAME"
         stopLobbyMusic()
@@ -522,10 +652,9 @@ class MainActivity : AppCompatActivity() {
         }
         rootContainer.addView(gameView, FrameLayout.LayoutParams(-1, -1))
 
-        // অ্যানিমেটেড GAME STARTED ব্যানার ওভারলে
         val banner = TextView(this).apply {
             text = "⚔️ GAME STARTED ⚔️"
-            textSize = 28f
+            textSize = 26f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.parseColor("#FFD700"))
             gravity = Gravity.CENTER
@@ -537,50 +666,25 @@ class MainActivity : AppCompatActivity() {
                 cornerRadius = 32f
                 setStroke(6, Color.parseColor("#FFD700"))
             }
-            scaleX = 0.2f
-            scaleY = 0.2f
-            alpha = 0f
+            scaleX = 0.2f; scaleY = 0.2f; alpha = 0f
         }
-        rootContainer.addView(banner, FrameLayout.LayoutParams(-2, -2).apply {
-            gravity = Gravity.CENTER
-        })
+        rootContainer.addView(banner, FrameLayout.LayoutParams(-2, -2).apply { gravity = Gravity.CENTER })
 
         banner.animate()
-            .scaleX(1.05f)
-            .scaleY(1.05f)
-            .alpha(1f)
+            .scaleX(1.05f).scaleY(1.05f).alpha(1f)
             .setDuration(420)
             .setInterpolator(OvershootInterpolator())
             .withEndAction {
                 Handler(Looper.getMainLooper()).postDelayed({
-                    banner.animate()
-                        .scaleX(0.85f)
-                        .scaleY(0.85f)
-                        .alpha(0f)
-                        .setDuration(400)
-                        .withEndAction { rootContainer.removeView(banner) }
-                        .start()
+                    banner.animate().scaleX(0.85f).scaleY(0.85f).alpha(0f).setDuration(400)
+                        .withEndAction { rootContainer.removeView(banner) }.start()
                 }, 1400)
-            }
-            .start()
+            }.start()
     }
 
-    override fun onPause() {
-        super.onPause()
-        stopLobbyMusic()
-    }
-
-    override fun onResume() {
-        super.onResume()
-        if (currentScreen != "GAME" && !isMusicMuted) startLobbyMusic()
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        bgMusicPlayer?.release()
-        startSfxPlayer?.release()
-        supabase.stop()
-    }
+    override fun onPause() { super.onPause(); stopLobbyMusic() }
+    override fun onResume() { super.onResume(); if (currentScreen != "GAME" && !isMusicMuted) startLobbyMusic() }
+    override fun onDestroy() { super.onDestroy(); bgMusicPlayer?.release(); startSfxPlayer?.release(); supabase.stop() }
 }
 
 class LudoGameView(
@@ -605,9 +709,7 @@ class LudoGameView(
     private var pulsePhase = 0f
 
     private val tokens = activePlayers.flatMap { p ->
-        (0..3).map { id ->
-            Token(p, id, steps = if (oneTokenOut && id == 0) 0 else -1)
-        }
+        (0..3).map { id -> Token(p, id, steps = if (oneTokenOut && id == 0) 0 else -1) }
     }
 
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -750,27 +852,37 @@ class LudoGameView(
         }
     }
 
+    private fun drawLudoKingPatternBackground(canvas: Canvas) {
+        canvas.drawColor(Color.parseColor("#184E77"))
+        canvas.save()
+        canvas.rotate(-28f, width / 2f, height / 2f)
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = 4f
+        paint.color = Color.argb(26, 255, 255, 255)
+        val step = 190f
+        var y = -height.toFloat()
+        while (y < height * 2f) {
+            var x = -width.toFloat()
+            while (x < width * 2f) {
+                canvas.drawRoundRect(x, y, x + 135f, y + 135f, 22f, 22f, paint)
+                canvas.drawCircle(x + 42f, y + 42f, 12f, paint)
+                canvas.drawCircle(x + 93f, y + 93f, 12f, paint)
+                x += step
+            }
+            y += step
+        }
+        paint.style = Paint.Style.FILL
+        canvas.restore()
+    }
+
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
+        drawLudoKingPatternBackground(canvas)
 
-        val bgShader = LinearGradient(
-            0f, 0f, 0f, height.toFloat(),
-            Color.parseColor("#0F2D52"), Color.parseColor("#18457A"), Shader.TileMode.CLAMP
-        )
-        paint.shader = bgShader
-        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
-        paint.shader = null
-
-        boardLeft = 18f
+        boardLeft = 16f
         val boardSize = width - boardLeft * 2
         cellSize = boardSize / 15f
         boardTop = (height - boardSize) / 2f
-
-        paint.color = Color.parseColor("#FFD700")
-        canvas.drawRoundRect(
-            boardLeft - 8f, boardTop - 8f,
-            boardLeft + boardSize + 8f, boardTop + boardSize + 8f, 16f, 16f, paint
-        )
 
         paint.color = Color.WHITE
         canvas.drawRect(boardLeft, boardTop, boardLeft + boardSize, boardTop + boardSize, paint)
@@ -796,7 +908,7 @@ class LudoGameView(
         }
 
         paint.style = Paint.Style.STROKE
-        paint.color = Color.parseColor("#78909C")
+        paint.color = Color.parseColor("#64748B")
         paint.strokeWidth = 2f
         for (i in 0..15) {
             canvas.drawLine(boardLeft + i * cellSize, boardTop, boardLeft + i * cellSize, boardTop + boardSize, paint)
@@ -807,11 +919,22 @@ class LudoGameView(
         safeGlobalIndices.forEach { idx ->
             val (cx, cy) = mainTrack[idx]
             val isStart = PlayerColor.values().any { it.startOffset == idx }
-            paint.color = if (isStart) Color.WHITE else Color.parseColor("#546E7A")
+            paint.color = if (isStart) Color.WHITE else Color.parseColor("#475569")
             paint.textSize = cellSize * 0.65f
             paint.textAlign = Paint.Align.CENTER
-            canvas.drawText("★", boardLeft + (cx + 0.5f) * cellSize, boardTop + (cy + 0.73f) * cellSize, paint)
+            canvas.drawText("☆", boardLeft + (cx + 0.5f) * cellSize, boardTop + (cy + 0.73f) * cellSize, paint)
         }
+
+        paint.textSize = cellSize * 0.62f
+        paint.textAlign = Paint.Align.CENTER
+        paint.color = PlayerColor.GREEN.colorHex
+        canvas.drawText("↓", boardLeft + 7.5f * cellSize, boardTop + 0.72f * cellSize, paint)
+        paint.color = PlayerColor.RED.colorHex
+        canvas.drawText("→", boardLeft + 0.5f * cellSize, boardTop + 7.72f * cellSize, paint)
+        paint.color = PlayerColor.YELLOW.colorHex
+        canvas.drawText("←", boardLeft + 14.5f * cellSize, boardTop + 7.72f * cellSize, paint)
+        paint.color = PlayerColor.BLUE.colorHex
+        canvas.drawText("↑", boardLeft + 7.5f * cellSize, boardTop + 14.72f * cellSize, paint)
 
         drawCenterTriangles(canvas)
 
@@ -820,22 +943,25 @@ class LudoGameView(
             paint.color = Color.WHITE
             paint.textSize = 34f
             paint.typeface = Typeface.DEFAULT_BOLD
+            paint.textAlign = Paint.Align.CENTER
             when (p) {
                 PlayerColor.BLUE -> {
-                    paint.textAlign = Paint.Align.LEFT
-                    canvas.drawText(pName, boardLeft + 22f, boardTop + boardSize - 14f, paint)
-                }
-                PlayerColor.RED -> {
-                    paint.textAlign = Paint.Align.LEFT
-                    canvas.drawText(pName, boardLeft + 22f, boardTop + 38f, paint)
-                }
-                PlayerColor.GREEN -> {
-                    paint.textAlign = Paint.Align.RIGHT
-                    canvas.drawText(pName, boardLeft + boardSize - 22f, boardTop + 38f, paint)
+                    canvas.drawText(pName, boardLeft + 3f * cellSize, boardTop + boardSize - 12f, paint)
                 }
                 PlayerColor.YELLOW -> {
-                    paint.textAlign = Paint.Align.RIGHT
-                    canvas.drawText(pName, boardLeft + boardSize - 22f, boardTop + boardSize - 14f, paint)
+                    canvas.drawText(pName, boardLeft + 12f * cellSize, boardTop + boardSize - 12f, paint)
+                }
+                PlayerColor.GREEN -> {
+                    canvas.save()
+                    canvas.rotate(180f, boardLeft + 12f * cellSize, boardTop + 26f)
+                    canvas.drawText(pName, boardLeft + 12f * cellSize, boardTop + 36f, paint)
+                    canvas.restore()
+                }
+                PlayerColor.RED -> {
+                    canvas.save()
+                    canvas.rotate(180f, boardLeft + 3f * cellSize, boardTop + 26f)
+                    canvas.drawText(pName, boardLeft + 3f * cellSize, boardTop + 36f, paint)
+                    canvas.restore()
                 }
             }
         }
@@ -853,7 +979,7 @@ class LudoGameView(
                 val px = boardLeft + pos.first * cellSize + offsetX
                 val py = boardTop + pos.second * cellSize
                 val isMovable = isDiceRolled && !isAnimating && t.owner == curr && canMove(t, diceValue)
-                drawPinToken(canvas, px, py, t.owner, scale, isMovable)
+                drawTeardropPinToken(canvas, px, py, t.owner, scale, isMovable)
             }
         }
 
@@ -891,34 +1017,48 @@ class LudoGameView(
         }
     }
 
-    private fun drawPinToken(canvas: Canvas, px: Float, py: Float, p: PlayerColor, scale: Float, highlight: Boolean) {
-        val r = cellSize * 0.37f * scale
+    private fun drawTeardropPinToken(canvas: Canvas, px: Float, py: Float, p: PlayerColor, scale: Float, highlight: Boolean) {
+        val r = cellSize * 0.36f * scale
         if (highlight) {
-            val ringR = r + 6f + sin(pulsePhase) * 5f
+            val ringR = r + 7f + sin(pulsePhase) * 5f
             paint.color = Color.parseColor("#FFD700")
             paint.style = Paint.Style.STROKE
             paint.strokeWidth = 5f
-            canvas.drawCircle(px, py - 3f, ringR, paint)
+            canvas.drawCircle(px, py, ringR, paint)
             paint.style = Paint.Style.FILL
         }
 
-        paint.color = Color.argb(95, 0, 0, 0)
-        canvas.drawCircle(px, py + 4f, r, paint)
+        paint.color = p.darkHex
+        canvas.drawCircle(px, py + r * 0.25f, r * 0.72f, paint)
 
+        val headY = py - r * 0.35f
+        val tipY = py + r * 0.45f
         paint.color = Color.WHITE
-        canvas.drawCircle(px, py - 4f, r, paint)
+        canvas.drawCircle(px, headY, r * 0.85f, paint)
+        val outerPin = Path().apply {
+            moveTo(px - r * 0.78f, headY + r * 0.2f)
+            lineTo(px + r * 0.78f, headY + r * 0.2f)
+            lineTo(px, tipY)
+            close()
+        }
+        canvas.drawPath(outerPin, paint)
 
         paint.color = p.colorHex
-        canvas.drawCircle(px, py - 4f, r * 0.84f, paint)
+        canvas.drawCircle(px, headY, r * 0.68f, paint)
+        val innerPin = Path().apply {
+            moveTo(px - r * 0.60f, headY + r * 0.15f)
+            lineTo(px + r * 0.60f, headY + r * 0.15f)
+            lineTo(px, tipY - r * 0.12f)
+            close()
+        }
+        canvas.drawPath(innerPin, paint)
 
         paint.color = Color.WHITE
-        canvas.drawCircle(px, py - 6f, r * 0.46f, paint)
-        paint.color = p.darkHex
-        canvas.drawCircle(px, py - 6f, r * 0.24f, paint)
+        canvas.drawCircle(px, headY, r * 0.34f, paint)
     }
 
     private fun drawCornerDiceBoxes(canvas: Canvas, curr: PlayerColor, boardSize: Float) {
-        val boxW = 245f
+        val boxW = 248f
         val boxH = 128f
 
         for (p in activePlayers) {
@@ -935,7 +1075,7 @@ class LudoGameView(
             paint.color = if (isCurrent) Color.parseColor("#FFD700") else Color.parseColor("#64748B")
             canvas.drawRoundRect(rect, 20f, 20f, paint)
 
-            paint.color = Color.parseColor("#1E3A8A")
+            paint.color = Color.parseColor("#1D4ED8")
             canvas.drawRoundRect(rect.left + 6f, rect.top + 6f, rect.right - 6f, rect.bottom - 6f, 16f, 16f, paint)
 
             val badgeX = if (p == PlayerColor.BLUE || p == PlayerColor.RED) rect.left + 48f else rect.right - 48f
@@ -960,7 +1100,7 @@ class LudoGameView(
                 canvas.scale(diceScale, diceScale)
             }
             val h = dSize / 2f
-            paint.color = if (isCurrent) Color.parseColor("#FFF5F5") else Color.parseColor("#CBD5E1")
+            paint.color = if (isCurrent) Color.parseColor("#FFF5F5") else Color.parseColor("#E2E8F0")
             canvas.drawRoundRect(-h, -h, h, h, 16f, 16f, paint)
 
             if (isCurrent) {
