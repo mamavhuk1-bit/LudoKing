@@ -1,4 +1,4 @@
-name: Build LudoKing APK
+name: Build LudoKing & Remote APKs
 
 on:
   push:
@@ -19,10 +19,15 @@ jobs:
         uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: '8.5'
-      - name: Build Debug APK
+      - name: Build Both APKs
         run: gradle assembleDebug
-      - name: Upload APK
+      - name: Upload LudoKing Game APK
         uses: actions/upload-artifact@v4
         with:
-          name: LudoKing-APK
+          name: LudoKing-Game-APK
           path: app/build/outputs/apk/debug/app-debug.apk
+      - name: Upload LudoRemote Controller APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: LudoRemote-Controller-APK
+          path: remote_app/build/outputs/apk/debug/remote_app-debug.apk
