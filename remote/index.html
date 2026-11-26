@@ -1,0 +1,55 @@
+﻿<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LudoKing Remote</title>
+  <style>
+    body { font-family: sans-serif; background: #111827; color: #fff; text-align: center; padding: 30px 15px; }
+    input { padding: 14px; font-size: 20px; width: 200px; text-align: center; border-radius: 10px; border: none; margin-bottom: 20px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; max-width: 340px; margin: 0 auto; }
+    button { padding: 25px; font-size: 18px; font-weight: bold; border: none; border-radius: 12px; color: #fff; cursor: pointer; }
+    .red { background: #E53935; }
+    .green { background: #43A047; }
+    .yellow { background: #FBC02D; color: #000; }
+    .blue { background: #1E88E5; }
+    #status { margin-top: 25px; font-size: 16px; color: #34D399; }
+  </style>
+</head>
+<body>
+  <h2>LudoKing Winner Controller</h2>
+  <input type="number" id="roomId" placeholder="Room ID দিন (যেমন 4521)" />
+  <div class="grid">
+    <button class="red" onclick="setWinner('RED')">RED জিতবে</button>
+    <button class="green" onclick="setWinner('GREEN')">GREEN জিতবে</button>
+    <button class="yellow" onclick="setWinner('YELLOW')">YELLOW জিতবে</button>
+    <button class="blue" onclick="setWinner('BLUE')">BLUE জিতবে</button>
+  </div>
+  <div id="status"></div>
+
+  <script>
+    const SUPABASE_URL = "https://qwshtbuvvsxehrkomukd.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_iFwTS5TmnBxIMqJzIcRXcA_MhTMeKJs";
+
+    async function setWinner(color) {
+      const roomId = document.getElementById('roomId').value.trim();
+      if (!roomId) return alert("আগে অ্যাপের উপরের বাম কোণা থেকে Room ID লিখুন!");
+      document.getElementById('status').innerText = "আপডেট হচ্ছে...";
+      const res = await fetch(${SUPABASE_URL}/rest/v1/game_rooms?room_id=eq., {
+        method: 'PATCH',
+        headers: {
+          'apikey': SUPABASE_KEY,
+          'Authorization': Bearer sb_publishable_iFwTS5TmnBxIMqJzIcRXcA_MhTMeKJs,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ winner_color: color })
+      });
+      if (res.ok) {
+        document.getElementById('status').innerText = ✅ সেট হয়েছে! এখন  ১ম হবে। আপনি রিমোট বন্ধ করতে পারেন।;
+      } else {
+        document.getElementById('status').innerText = "❌ সমস্যা হয়েছে, Room ID চেক করুন।";
+      }
+    }
+  </script>
+</body>
+</html>
