@@ -1,4 +1,4 @@
-﻿name: Build LudoKing APK
+name: Build LudoKing APK
 
 on:
   push:

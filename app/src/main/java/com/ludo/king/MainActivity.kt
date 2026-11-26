@@ -1,4 +1,4 @@
-﻿package com.ludo.king
+package com.ludo.king
 
 import android.content.Context
 import android.graphics.*

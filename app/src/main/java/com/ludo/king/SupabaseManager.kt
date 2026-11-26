@@ -1,4 +1,4 @@
-﻿package com.ludo.king
+package com.ludo.king
 
 import kotlinx.coroutines.*
 import okhttp3.*
