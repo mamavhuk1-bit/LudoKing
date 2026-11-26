@@ -1,20 +1,25 @@
 package com.ludo.king
 
+import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.*
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.MotionEvent
 import android.view.View
-import android.widget.Toast
+import android.view.animation.OvershootInterpolator
 import androidx.appcompat.app.AppCompatActivity
+import kotlin.math.cos
 import kotlin.math.hypot
+import kotlin.math.sin
 import kotlin.random.Random
 
-enum class PlayerColor(val colorHex: Int, val darkHex: Int, val startOffset: Int) {
-    RED(Color.parseColor("#E53935"), Color.parseColor("#B71C1C"), 0),
-    GREEN(Color.parseColor("#43A047"), Color.parseColor("#1B5E20"), 13),
-    YELLOW(Color.parseColor("#FDD835"), Color.parseColor("#F57F17"), 26),
-    BLUE(Color.parseColor("#1E88E5"), Color.parseColor("#0D47A1"), 39)
+enum class PlayerColor(val colorHex: Int, val lightHex: Int, val darkHex: Int, val startOffset: Int) {
+    RED(Color.parseColor("#E53935"), Color.parseColor("#FF8A80"), Color.parseColor("#8E0000"), 0),
+    GREEN(Color.parseColor("#43A047"), Color.parseColor("#B9F6CA"), Color.parseColor("#005005"), 13),
+    YELLOW(Color.parseColor("#FBC02D"), Color.parseColor("#FFFF8D"), Color.parseColor("#C49000"), 26),
+    BLUE(Color.parseColor("#1E88E5"), Color.parseColor("#82B1FF"), Color.parseColor("#003C8F"), 39)
 }
 
 data class Token(val owner: PlayerColor, val id: Int, var steps: Int = -1)
@@ -46,15 +51,34 @@ class LudoGameView(
 
     private val players = PlayerColor.values()
     private var currentPlayerIdx = 0
-    private var diceValue = 1
+    private var diceValue = 6
     private var isDiceRolled = false
+    private var isAnimating = false
     private var winner: PlayerColor? = null
+
+    private var diceRotation = 0f
+    private var diceScale = 1f
+    private var pulsePhase = 0f
 
     private val tokens = players.flatMap { p -> (0..3).map { Token(p, it) } }
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private var cellSize = 0f
     private var boardTop = 0f
     private var diceRect = RectF()
+    private var muteRect = RectF()
+    private val handler = Handler(Looper.getMainLooper())
+
+    private val pulseRunnable = object : Runnable {
+        override fun run() {
+            pulsePhase += 0.18f
+            invalidate()
+            handler.postDelayed(this, 40)
+        }
+    }
+
+    init {
+        handler.post(pulseRunnable)
+    }
 
     private val mainTrack = listOf(
         1 to 6, 2 to 6, 3 to 6, 4 to 6, 5 to 6,
@@ -81,10 +105,10 @@ class LudoGameView(
     )
 
     private val yardCoords = mapOf(
-        PlayerColor.RED to listOf(1.8f to 1.8f, 3.8f to 1.8f, 1.8f to 3.8f, 3.8f to 3.8f),
-        PlayerColor.GREEN to listOf(10.8f to 1.8f, 12.8f to 1.8f, 10.8f to 3.8f, 12.8f to 3.8f),
-        PlayerColor.YELLOW to listOf(10.8f to 10.8f, 12.8f to 10.8f, 10.8f to 12.8f, 12.8f to 12.8f),
-        PlayerColor.BLUE to listOf(1.8f to 10.8f, 3.8f to 10.8f, 1.8f to 12.8f, 3.8f to 12.8f)
+        PlayerColor.RED to listOf(1.9f to 1.9f, 4.1f to 1.9f, 1.9f to 4.1f, 4.1f to 4.1f),
+        PlayerColor.GREEN to listOf(10.9f to 1.9f, 13.1f to 1.9f, 10.9f to 4.1f, 13.1f to 4.1f),
+        PlayerColor.YELLOW to listOf(10.9f to 10.9f, 13.1f to 10.9f, 10.9f to 13.1f, 13.1f to 13.1f),
+        PlayerColor.BLUE to listOf(1.9f to 10.9f, 4.1f to 10.9f, 1.9f to 13.1f, 4.1f to 13.1f)
     )
 
     private fun rollSmartDice(player: PlayerColor): Int {
@@ -96,19 +120,19 @@ class LudoGameView(
             for (d in 1..6) {
                 var weight = 10
                 for (t in myTokens) {
-                    if (t.steps == -1 && d == 6) weight += 35
+                    if (t.steps == -1 && d == 6) weight += 38
                     if (t.steps in 0..56) {
                         val nextStep = t.steps + d
-                        if (nextStep == 57) weight += 45
+                        if (nextStep == 57) weight += 48
                         if (nextStep in 0..50) {
                             val gIdx = (player.startOffset + nextStep) % 52
-                            if (gIdx in safeGlobalIndices) weight += 20
+                            if (gIdx in safeGlobalIndices) weight += 22
                             val canKill = tokens.any { opp ->
                                 opp.owner != player && opp.steps in 0..50 &&
                                         ((opp.owner.startOffset + opp.steps) % 52 == gIdx) &&
                                         gIdx !in safeGlobalIndices
                             }
-                            if (canKill) weight += 50
+                            if (canKill) weight += 55
                         }
                     }
                 }
@@ -135,8 +159,8 @@ class LudoGameView(
         }
     }
 
-    private fun getTokenPixelPos(t: Token): Pair<Float, Float> {
-        val (gx, gy) = when {
+    private fun getTokenGridPos(t: Token): Pair<Float, Float> {
+        return when {
             t.steps == -1 -> yardCoords[t.owner]!![t.id]
             t.steps in 0..50 -> {
                 val c = mainTrack[(t.owner.startOffset + t.steps) % 52]
@@ -148,114 +172,256 @@ class LudoGameView(
             }
             else -> 7.5f to 7.5f
         }
-        return (gx * cellSize) to (boardTop + gy * cellSize)
     }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        canvas.drawColor(Color.parseColor("#1A237E"))
 
-        cellSize = width / 15f
-        boardTop = (height - width) / 2f
+        // রয়্যাল ব্লু ব্যাকগ্রাউন্ড গ্রেডিয়েন্ট
+        val bgShader = LinearGradient(
+            0f, 0f, 0f, height.toFloat(),
+            Color.parseColor("#0A153D"), Color.parseColor("#1B2E7A"), Shader.TileMode.CLAMP
+        )
+        paint.shader = bgShader
+        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
+        paint.shader = null
 
-        paint.color = Color.WHITE
-        canvas.drawRect(0f, boardTop, width.toFloat(), boardTop + width, paint)
+        val margin = 20f
+        val boardSize = width - margin * 2
+        cellSize = boardSize / 15f
+        boardTop = (height - boardSize) / 2f
 
-        drawYard(canvas, 0, 0, PlayerColor.RED)
-        drawYard(canvas, 9, 0, PlayerColor.GREEN)
-        drawYard(canvas, 9, 9, PlayerColor.YELLOW)
-        drawYard(canvas, 0, 9, PlayerColor.BLUE)
+        // গোল্ডেন রয়্যাল বোর্ড ফ্রেম
+        paint.color = Color.parseColor("#FFD700")
+        canvas.drawRoundRect(
+            margin - 12f, boardTop - 12f,
+            width - margin + 12f, boardTop + boardSize + 12f,
+            24f, 24f, paint
+        )
 
+        // সাদা বোর্ড বেস
+        paint.color = Color.parseColor("#FAFAFA")
+        canvas.drawRect(margin, boardTop, margin + boardSize, boardTop + boardSize, paint)
+
+        // ৪টি হোম ইয়ার্ড
+        drawYard(canvas, margin, 0, 0, PlayerColor.RED)
+        drawYard(canvas, margin, 9, 0, PlayerColor.GREEN)
+        drawYard(canvas, margin, 9, 9, PlayerColor.YELLOW)
+        drawYard(canvas, margin, 0, 9, PlayerColor.BLUE)
+
+        // হোম স্ট্রেচ এবং স্টার্টিং সেল
         for (p in players) {
             paint.color = p.colorHex
             homeStretches[p]!!.take(5).forEach { (cx, cy) ->
-                canvas.drawRect(cx * cellSize, boardTop + cy * cellSize, (cx + 1) * cellSize, boardTop + (cy + 1) * cellSize, paint)
+                canvas.drawRect(
+                    margin + cx * cellSize, boardTop + cy * cellSize,
+                    margin + (cx + 1) * cellSize, boardTop + (cy + 1) * cellSize, paint
+                )
             }
             val startCell = mainTrack[p.startOffset]
-            canvas.drawRect(startCell.first * cellSize, boardTop + startCell.second * cellSize, (startCell.first + 1) * cellSize, boardTop + (startCell.second + 1) * cellSize, paint)
+            canvas.drawRect(
+                margin + startCell.first * cellSize, boardTop + startCell.second * cellSize,
+                margin + (startCell.first + 1) * cellSize, boardTop + (startCell.second + 1) * cellSize, paint
+            )
         }
 
+        // গ্রিড বর্ডার
         paint.style = Paint.Style.STROKE
-        paint.color = Color.GRAY
+        paint.color = Color.parseColor("#B0BEC5")
         paint.strokeWidth = 2f
         for (i in 0..15) {
-            canvas.drawLine(i * cellSize, boardTop, i * cellSize, boardTop + width, paint)
-            canvas.drawLine(0f, boardTop + i * cellSize, width.toFloat(), boardTop + i * cellSize, paint)
+            canvas.drawLine(margin + i * cellSize, boardTop, margin + i * cellSize, boardTop + boardSize, paint)
+            canvas.drawLine(margin, boardTop + i * cellSize, margin + boardSize, boardTop + i * cellSize, paint)
         }
         paint.style = Paint.Style.FILL
 
-        paint.color = Color.DKGRAY
-        paint.textSize = cellSize * 0.65f
-        paint.textAlign = Paint.Align.CENTER
+        // স্টার সেফ জোন
         safeGlobalIndices.forEach { idx ->
             val (cx, cy) = mainTrack[idx]
-            canvas.drawText("★", (cx + 0.5f) * cellSize, boardTop + (cy + 0.72f) * cellSize, paint)
+            val isStart = players.any { it.startOffset == idx }
+            paint.color = if (isStart) Color.WHITE else Color.parseColor("#78909C")
+            paint.textSize = cellSize * 0.68f
+            paint.textAlign = Paint.Align.CENTER
+            canvas.drawText("★", margin + (cx + 0.5f) * cellSize, boardTop + (cy + 0.74f) * cellSize, paint)
         }
 
-        drawCenterTriangles(canvas)
+        // সেন্টার রয়্যাল হোম ও মুকুট
+        drawCenterTriangles(canvas, margin)
 
-        paint.color = Color.WHITE
-        paint.textSize = 44f
+        // টপ হেডার বার (Room ID + Mute Button)
+        paint.color = Color.parseColor("#FFD700")
+        paint.textSize = 42f
+        paint.typeface = Typeface.DEFAULT_BOLD
         paint.textAlign = Paint.Align.LEFT
-        canvas.drawText("Room: $roomId", 40f, boardTop - 50f, paint)
+        canvas.drawText("👑 LUDO KING  #$roomId", 36f, boardTop - 45f, paint)
 
+        muteRect.set(width - 130f, boardTop - 95f, width - 30f, boardTop - 25f)
+        paint.color = Color.parseColor("#283593")
+        canvas.drawRoundRect(muteRect, 16f, 16f, paint)
+        paint.color = Color.WHITE
+        paint.textSize = 38f
+        paint.textAlign = Paint.Align.CENTER
+        canvas.drawText(if (SoundEngine.isMuted) "🔇" else "🔊", muteRect.centerX(), muteRect.centerY() + 14f, paint)
+
+        // ৩D টোকেন (গুটি) আঁকা - একই ঘরে একাধিক গুটি থাকলে পাশাপাশি স্কেল হবে
         val curr = players[currentPlayerIdx]
-        paint.color = curr.colorHex
-        paint.textAlign = Paint.Align.RIGHT
-        canvas.drawText("Turn: ${curr.name}", width - 40f, boardTop - 50f, paint)
+        val activeTokens = tokens.filter { it.steps < 57 }
+        val grouped = activeTokens.groupBy { getTokenGridPos(it) }
 
-        for (t in tokens) {
-            if (t.steps == 57) continue
-            val (px, py) = getTokenPixelPos(t)
-            paint.color = Color.WHITE
-            canvas.drawCircle(px, py, cellSize * 0.38f, paint)
-            paint.color = t.owner.colorHex
-            canvas.drawCircle(px, py, cellSize * 0.31f, paint)
-            paint.color = t.owner.darkHex
-            canvas.drawCircle(px, py, cellSize * 0.14f, paint)
+        for ((pos, group) in grouped) {
+            val count = group.size
+            group.forEachIndexed { index, t ->
+                val offsetX = if (count > 1) (index - (count - 1) / 2f) * (cellSize * 0.22f) else 0f
+                val scale = if (count > 1) 0.78f else 1.0f
+                val px = margin + pos.first * cellSize + offsetX
+                val py = boardTop + pos.second * cellSize
+                val isMovable = isDiceRolled && !isAnimating && t.owner == curr && canMove(t, diceValue)
+                draw3DToken(canvas, px, py, t.owner, scale, isMovable)
+            }
         }
 
-        val dSize = 160f
+        // নিচের প্লেয়ার প্রোফাইল ও 3D অ্যানিমেটেড ডাইস
+        drawBottomControls(canvas, curr, boardTop + boardSize)
+
+        // বিজয়ী স্ক্রিন
+        winner?.let {
+            paint.color = Color.argb(225, 10, 15, 40)
+            canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
+            paint.color = Color.parseColor("#FFD700")
+            paint.textSize = 72f
+            paint.textAlign = Paint.Align.CENTER
+            canvas.drawText("👑 ${it.name} CHAMPION! 👑", width / 2f, height / 2f, paint)
+        }
+    }
+
+    private fun draw3DToken(canvas: Canvas, px: Float, py: Float, p: PlayerColor, scale: Float, highlight: Boolean) {
+        val r = cellSize * 0.38f * scale
+        if (highlight) {
+            val ringR = r + 6f + sin(pulsePhase) * 5f
+            paint.color = Color.parseColor("#FFD700")
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = 5f
+            canvas.drawCircle(px, py - 4f, ringR, paint)
+            paint.style = Paint.Style.FILL
+        }
+
+        // ড্রপ শ্যাডো
+        paint.color = Color.argb(90, 0, 0, 0)
+        canvas.drawCircle(px, py + 5f, r, paint)
+
+        // আউটার সাদা রিম
+        paint.color = Color.WHITE
+        canvas.drawCircle(px, py - 3f, r, paint)
+
+        // ৩D গ্রেডিয়েন্ট বডি
+        val shader = RadialGradient(
+            px - r * 0.3f, py - r * 0.4f, r * 1.3f,
+            intArrayOf(p.lightHex, p.colorHex, p.darkHex),
+            floatArrayOf(0f, 0.6f, 1f), Shader.TileMode.CLAMP
+        )
+        paint.shader = shader
+        canvas.drawCircle(px, py - 3f, r * 0.84f, paint)
+        paint.shader = null
+
+        // ভেতরের রিং
+        paint.color = Color.WHITE
+        canvas.drawCircle(px, py - 3f, r * 0.34f, paint)
+        paint.color = p.colorHex
+        canvas.drawCircle(px, py - 3f, r * 0.22f, paint)
+    }
+
+    private fun drawBottomControls(canvas: Canvas, curr: PlayerColor, boardBottom: Float) {
+        val dSize = 175f
         val dLeft = (width - dSize) / 2f
-        val dTop = boardTop + width + 50f
+        val dTop = boardBottom + 45f
         diceRect.set(dLeft, dTop, dLeft + dSize, dTop + dSize)
 
+        // কার টার্ন ব্যানার
         paint.color = curr.colorHex
-        canvas.drawRoundRect(diceRect, 28f, 28f, paint)
-        paint.color = Color.WHITE
-        canvas.drawRoundRect(dLeft + 10f, dTop + 10f, dLeft + dSize - 10f, dTop + dSize - 10f, 20f, 20f, paint)
-
-        paint.color = Color.BLACK
-        paint.textSize = 75f
+        canvas.drawRoundRect(dLeft - 230f, dTop + 35f, dLeft - 25f, dTop + dSize - 35f, 24f, 24f, paint)
+        paint.color = if (curr == PlayerColor.YELLOW) Color.BLACK else Color.WHITE
+        paint.textSize = 36f
         paint.textAlign = Paint.Align.CENTER
-        canvas.drawText(diceValue.toString(), width / 2f, dTop + 105f, paint)
+        canvas.drawText(curr.name, dLeft - 127f, dTop + dSize / 2f + 12f, paint)
 
-        winner?.let {
-            paint.color = Color.argb(210, 0, 0, 0)
-            canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
-            paint.color = Color.YELLOW
-            paint.textSize = 70f
-            canvas.drawText("🏆 ${it.name} WINS! 🏆", width / 2f, height / 2f, paint)
-        }
-    }
-
-    private fun drawYard(canvas: Canvas, gx: Int, gy: Int, p: PlayerColor) {
-        paint.color = p.colorHex
-        canvas.drawRect(gx * cellSize, boardTop + gy * cellSize, (gx + 6) * cellSize, boardTop + (gy + 6) * cellSize, paint)
+        // ডাইস রোল হিন্ট
         paint.color = Color.WHITE
-        canvas.drawRect((gx + 1) * cellSize, boardTop + (gy + 1) * cellSize, (gx + 5) * cellSize, boardTop + (gy + 5) * cellSize, paint)
-        paint.color = p.colorHex
-        yardCoords[p]!!.forEach { (cx, cy) ->
-            canvas.drawCircle(cx * cellSize, boardTop + cy * cellSize, cellSize * 0.42f, paint)
+        paint.textSize = 30f
+        paint.textAlign = Paint.Align.LEFT
+        val hintText = if (!isDiceRolled) "👈 ছক্কা চালুন" else "গুটি সিলেক্ট করুন"
+        canvas.drawText(hintText, dLeft + dSize + 25f, dTop + dSize / 2f + 10f, paint)
+
+        // অ্যানিমেটেড 3D ডাইস আঁকা
+        canvas.save()
+        canvas.translate(diceRect.centerX(), diceRect.centerY())
+        canvas.rotate(diceRotation)
+        canvas.scale(diceScale, diceScale)
+
+        val half = dSize / 2f
+        // ডাইস শ্যাডো ও গোল্ড বর্ডার
+        paint.color = Color.parseColor("#FFD700")
+        canvas.drawRoundRect(-half - 6f, -half - 6f, half + 6f, half + 6f, 32f, 32f, paint)
+
+        val diceShader = LinearGradient(
+            -half, -half, half, half,
+            Color.WHITE, Color.parseColor("#E0E0E0"), Shader.TileMode.CLAMP
+        )
+        paint.shader = diceShader
+        canvas.drawRoundRect(-half, -half, half, half, 28f, 28f, paint)
+        paint.shader = null
+
+        // ছক্কার ফোঁটা (Dots) আঁকা
+        drawDiceDots(canvas, diceValue, half * 0.55f, curr.colorHex)
+        canvas.restore()
+    }
+
+    private fun drawDiceDots(canvas: Canvas, value: Int, offset: Float, sixColor: Int) {
+        val dotR = 16f
+        paint.color = if (value == 1 || value == 6) sixColor else Color.parseColor("#212121")
+
+        fun dot(dx: Float, dy: Float) {
+            canvas.drawCircle(dx, dy, dotR, paint)
+        }
+
+        when (value) {
+            1 -> dot(0f, 0f)
+            2 -> { dot(-offset, -offset); dot(offset, offset) }
+            3 -> { dot(-offset, -offset); dot(0f, 0f); dot(offset, offset) }
+            4 -> { dot(-offset, -offset); dot(offset, -offset); dot(-offset, offset); dot(offset, offset) }
+            5 -> { dot(-offset, -offset); dot(offset, -offset); dot(0f, 0f); dot(-offset, offset); dot(offset, offset) }
+            6 -> {
+                dot(-offset, -offset); dot(offset, -offset)
+                dot(-offset, 0f); dot(offset, 0f)
+                dot(-offset, offset); dot(offset, offset)
+            }
         }
     }
 
-    private fun drawCenterTriangles(canvas: Canvas) {
-        val l = 6 * cellSize
-        val r = 9 * cellSize
+    private fun drawYard(canvas: Canvas, margin: Float, gx: Int, gy: Int, p: PlayerColor) {
+        paint.color = p.colorHex
+        canvas.drawRect(
+            margin + gx * cellSize, boardTop + gy * cellSize,
+            margin + (gx + 6) * cellSize, boardTop + (gy + 6) * cellSize, paint
+        )
+        paint.color = Color.WHITE
+        canvas.drawRoundRect(
+            margin + (gx + 0.9f) * cellSize, boardTop + (gy + 0.9f) * cellSize,
+            margin + (gx + 5.1f) * cellSize, boardTop + (gy + 5.1f) * cellSize, 20f, 20f, paint
+        )
+        yardCoords[p]!!.forEach { (cx, cy) ->
+            paint.color = p.lightHex
+            canvas.drawCircle(margin + cx * cellSize, boardTop + cy * cellSize, cellSize * 0.48f, paint)
+            paint.color = p.colorHex
+            canvas.drawCircle(margin + cx * cellSize, boardTop + cy * cellSize, cellSize * 0.36f, paint)
+        }
+    }
+
+    private fun drawCenterTriangles(canvas: Canvas, margin: Float) {
+        val l = margin + 6 * cellSize
+        val r = margin + 9 * cellSize
         val t = boardTop + 6 * cellSize
         val b = boardTop + 9 * cellSize
-        val cx = 7.5f * cellSize
+        val cx = margin + 7.5f * cellSize
         val cy = boardTop + 7.5f * cellSize
 
         fun tri(x1: Float, y1: Float, x2: Float, y2: Float, col: Int) {
@@ -267,39 +433,104 @@ class LudoGameView(
         tri(l, t, r, t, PlayerColor.GREEN.colorHex)
         tri(r, t, r, b, PlayerColor.YELLOW.colorHex)
         tri(l, b, r, b, PlayerColor.BLUE.colorHex)
+
+        paint.color = Color.WHITE
+        canvas.drawCircle(cx, cy, cellSize * 0.55f, paint)
+        paint.textSize = cellSize * 0.65f
+        paint.textAlign = Paint.Align.CENTER
+        canvas.drawText("👑", cx, cy + cellSize * 0.22f, paint)
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        if (event.action != MotionEvent.ACTION_DOWN || winner != null) return true
+        if (event.action != MotionEvent.ACTION_DOWN) return true
+
+        if (muteRect.contains(event.x, event.y)) {
+            SoundEngine.isMuted = !SoundEngine.isMuted
+            invalidate()
+            return true
+        }
+
+        if (winner != null || isAnimating) return true
         val curr = players[currentPlayerIdx]
 
         if (!isDiceRolled) {
             if (diceRect.contains(event.x, event.y)) {
-                diceValue = rollSmartDice(curr)
-                isDiceRolled = true
-                val movable = tokens.filter { it.owner == curr && canMove(it, diceValue) }
-                if (movable.isEmpty()) {
-                    nextTurn(false)
-                } else if (movable.size == 1) {
-                    moveToken(movable.first())
-                }
-                invalidate()
+                animateAndRollDice(curr)
             }
         } else {
+            val margin = 20f
             val clicked = tokens.filter { it.owner == curr && canMove(it, diceValue) }
                 .minByOrNull { t ->
-                    val (px, py) = getTokenPixelPos(t)
-                    hypot(event.x - px, event.y - py)
+                    val (gx, gy) = getTokenGridPos(t)
+                    hypot(event.x - (margin + gx * cellSize), event.y - (boardTop + gy * cellSize))
                 }
             if (clicked != null) {
-                val (px, py) = getTokenPixelPos(clicked)
-                if (hypot(event.x - px, event.y - py) < cellSize * 1.1f) {
-                    moveToken(clicked)
-                    invalidate()
+                val (gx, gy) = getTokenGridPos(clicked)
+                if (hypot(event.x - (margin + gx * cellSize), event.y - (boardTop + gy * cellSize)) < cellSize * 1.2f) {
+                    animateTokenMove(clicked)
                 }
             }
         }
         return true
+    }
+
+    private fun animateAndRollDice(curr: PlayerColor) {
+        isAnimating = true
+        SoundEngine.playDiceRoll()
+        val finalDice = rollSmartDice(curr)
+
+        val anim = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 360
+            interpolator = OvershootInterpolator()
+            addUpdateListener { va ->
+                val f = va.animatedFraction
+                diceRotation = sin(f * Math.PI * 4).toFloat() * 22f
+                diceScale = 1f + sin(f * Math.PI).toFloat() * 0.22f
+                if (f < 0.85f) {
+                    diceValue = Random.nextInt(1, 7)
+                } else {
+                    diceValue = finalDice
+                    diceRotation = 0f
+                    diceScale = 1f
+                }
+                invalidate()
+            }
+        }
+        anim.start()
+
+        handler.postDelayed({
+            isAnimating = false
+            isDiceRolled = true
+            if (diceValue == 6) SoundEngine.playHomeOrSix()
+
+            val movable = tokens.filter { it.owner == curr && canMove(it, diceValue) }
+            if (movable.isEmpty()) {
+                handler.postDelayed({ nextTurn(false); invalidate() }, 450)
+            } else if (movable.size == 1) {
+                animateTokenMove(movable.first())
+            }
+            invalidate()
+        }, 390)
+    }
+
+    private fun animateTokenMove(t: Token) {
+        isAnimating = true
+        val stepsToMove = if (t.steps == -1) 1 else diceValue
+        var moved = 0
+
+        fun stepOnce() {
+            if (moved < stepsToMove) {
+                if (t.steps == -1) t.steps = 0 else t.steps += 1
+                moved++
+                SoundEngine.playStep()
+                invalidate()
+                handler.postDelayed({ stepOnce() }, 135)
+            } else {
+                isAnimating = false
+                finalizeMove(t)
+            }
+        }
+        stepOnce()
     }
 
     private fun canMove(t: Token, dice: Int): Boolean {
@@ -307,18 +538,16 @@ class LudoGameView(
         return t.steps + dice <= 57
     }
 
-    private fun moveToken(t: Token) {
+    private fun finalizeMove(t: Token) {
         var extraTurn = (diceValue == 6)
-        if (t.steps == -1 && diceValue == 6) {
-            t.steps = 0
-        } else {
-            t.steps += diceValue
-        }
 
         if (t.steps == 57) {
             extraTurn = true
+            SoundEngine.playHomeOrSix()
             if (tokens.count { it.owner == t.owner && it.steps == 57 } == 4) {
                 winner = t.owner
+                SoundEngine.playWinFanfare()
+                invalidate()
                 return
             }
         } else if (t.steps in 0..50) {
@@ -331,11 +560,12 @@ class LudoGameView(
                 if (victims.size == 1) {
                     victims.first().steps = -1
                     extraTurn = true
-                    Toast.makeText(context, "Captured!", Toast.LENGTH_SHORT).show()
+                    SoundEngine.playCapture()
                 }
             }
         }
         nextTurn(extraTurn)
+        invalidate()
     }
 
     private fun nextTurn(extraTurn: Boolean) {
