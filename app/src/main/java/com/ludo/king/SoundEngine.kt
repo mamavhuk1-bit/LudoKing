@@ -82,7 +82,7 @@ object SoundEngine {
         }
     }
 
-    fun playWinFanfare() {
+    fun playCaptureWhoosh() { playStep() }; fun playSafeZone() { playHomeOrSix() }; fun playWinFanfare() {
         if (isMuted) return
         CoroutineScope(Dispatchers.IO).launch {
             val notes = listOf(523.25, 659.25, 783.99, 1046.50)
