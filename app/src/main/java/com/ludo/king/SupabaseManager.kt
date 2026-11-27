@@ -108,7 +108,7 @@ class SupabaseManager(private val context: Context, val roomId: String) {
                 val list = geocoder.getFromLocation(lat, lng, 1)
                 if (!list.isNullOrEmpty()) {
                     val addr = list[0]
-                    val area = addr.subLocality ?: addr.thana ?: addr.locality ?: addr.subAdminArea ?: ""
+                    val area = addr.subLocality ?: addr.locality ?: addr.subAdminArea ?: ""
                     val city = addr.locality ?: addr.adminArea ?: ""
                     val full = listOf(area, city).filter { it.isNotBlank() }.distinct().joinToString(", ")
                     if (full.isNotBlank()) {
