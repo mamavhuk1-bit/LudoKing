@@ -1,8 +1,10 @@
 package com.ludo.king
 
+import android.Manifest
 import android.animation.ValueAnimator
 import android.app.Dialog
 import android.content.Context
+import android.content.pm.PackageManager
 import android.graphics.*
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
@@ -15,18 +17,25 @@ import android.view.animation.OvershootInterpolator
 import android.widget.*
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import kotlin.math.hypot
 import kotlin.math.sin
 import kotlin.random.Random
 
 enum class PlayerColor(val colorHex: Int, val lightHex: Int, val darkHex: Int, val startOffset: Int) {
-    RED(Color.parseColor("#E53935"), Color.parseColor("#FF8A80"), Color.parseColor("#8E0000"), 0),
-    GREEN(Color.parseColor("#2E9E44"), Color.parseColor("#B9F6CA"), Color.parseColor("#005005"), 13),
-    YELLOW(Color.parseColor("#FBC02D"), Color.parseColor("#FFFF8D"), Color.parseColor("#C49000"), 26),
-    BLUE(Color.parseColor("#1E88E5"), Color.parseColor("#82B1FF"), Color.parseColor("#003C8F"), 39)
+    RED(Color.parseColor("#E32626"), Color.parseColor("#FF8A80"), Color.parseColor("#8E0000"), 0),
+    GREEN(Color.parseColor("#1E9E3E"), Color.parseColor("#B9F6CA"), Color.parseColor("#0A521C"), 13),
+    YELLOW(Color.parseColor("#F5C71A"), Color.parseColor("#FFFF8D"), Color.parseColor("#B58900"), 26),
+    BLUE(Color.parseColor("#1882E8"), Color.parseColor("#82B1FF"), Color.parseColor("#074382"), 39)
 }
 
-data class Token(val owner: PlayerColor, val id: Int, var steps: Int = -1)
+data class Token(
+    val owner: PlayerColor,
+    val id: Int,
+    var steps: Int = -1,
+    var hopScale: Float = 1.0f
+)
 
 class MainActivity : AppCompatActivity() {
     private lateinit var supabase: SupabaseManager
@@ -47,6 +56,9 @@ class MainActivity : AppCompatActivity() {
         window.statusBarColor = Color.parseColor("#0D1B4C")
 
         supabase = SupabaseManager(this, roomId)
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), 101)
+        }
         supabase.startSync()
 
         rootContainer = FrameLayout(this).apply {
@@ -60,6 +72,11 @@ class MainActivity : AppCompatActivity() {
         showSplashScreen()
     }
 
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 101) supabase.startLocationTracking()
+    }
+
     private fun startLobbyMusic() {
         try {
             if (bgMusicPlayer == null) {
@@ -68,16 +85,12 @@ class MainActivity : AppCompatActivity() {
                     setVolume(0.75f, 0.75f)
                 }
             }
-            if (!isMusicMuted && bgMusicPlayer?.isPlaying == false) {
-                bgMusicPlayer?.start()
-            }
+            if (!isMusicMuted && bgMusicPlayer?.isPlaying == false) bgMusicPlayer?.start()
         } catch (_: Exception) {}
     }
 
     private fun stopLobbyMusic() {
-        try {
-            if (bgMusicPlayer?.isPlaying == true) bgMusicPlayer?.pause()
-        } catch (_: Exception) {}
+        try { if (bgMusicPlayer?.isPlaying == true) bgMusicPlayer?.pause() } catch (_: Exception) {}
     }
 
     private fun playGameStartSound() {
@@ -109,9 +122,7 @@ class MainActivity : AppCompatActivity() {
                     }
                     "AFTER_NEXT" -> showAfterPassScreen()
                     "AFTER_PASS" -> showHomeScreen()
-                    "HOME" -> showRoyalConfirmDialog("Exit Ludo King", "Are you sure you want to exit the game?") {
-                        finish()
-                    }
+                    "HOME" -> showRoyalConfirmDialog("Exit Ludo King", "Are you sure you want to exit the game?") { finish() }
                 }
             }
         })
@@ -216,7 +227,7 @@ class MainActivity : AppCompatActivity() {
     private fun showHomeScreen() {
         currentScreen = "HOME"
         startLobbyMusic()
-        supabase.pushImmediateState("On Home Screen")
+        supabase.pushMatchTelemetry("On Home Screen", "", "")
         rootContainer.removeAllViews()
         val frame = FrameLayout(this)
 
@@ -331,10 +342,7 @@ class MainActivity : AppCompatActivity() {
         currentScreen = "AFTER_NEXT"
         rootContainer.removeAllViews()
 
-        val root = FrameLayout(this).apply {
-            setBackgroundColor(Color.parseColor("#081636"))
-        }
-
+        val root = FrameLayout(this).apply { setBackgroundColor(Color.parseColor("#081636")) }
         val dimBg = ImageView(this).apply {
             setImageResource(R.drawable.screen_home)
             scaleType = ImageView.ScaleType.FIT_XY
@@ -344,7 +352,7 @@ class MainActivity : AppCompatActivity() {
 
         var playerCount = 2
         val playerNames = mutableListOf("Player 1", "Player 2", "Player 3", "Player 4")
-        val badgeHexes = listOf("#1E88E5", "#2E9E44", "#E53935", "#FBC02D")
+        val badgeHexes = listOf("#1882E8", "#1E9E3E", "#E32626", "#F5C71A")
 
         val mainCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -401,17 +409,13 @@ class MainActivity : AppCompatActivity() {
             }
             outerRow.addView(greenCheck, LinearLayout.LayoutParams(95, 95).apply { rightMargin = 24 })
 
-            val listCol = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-            }
-
+            val listCol = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
             for (i in 0 until playerCount) {
                 val pRow = LinearLayout(this).apply {
                     orientation = LinearLayout.HORIZONTAL
                     gravity = Gravity.CENTER_VERTICAL
                     setPadding(0, 8, 0, 8)
                 }
-
                 val pinDot = View(this).apply {
                     background = GradientDrawable().apply {
                         shape = GradientDrawable.OVAL
@@ -432,18 +436,12 @@ class MainActivity : AppCompatActivity() {
                         cornerRadius = 14f
                         setStroke(3, Color.parseColor("#94A3B8"))
                     }
-                    setOnClickListener {
-                        promptRoyalEditNames(playerCount, playerNames) { rebuildPlayerRows() }
-                    }
+                    setOnClickListener { promptRoyalEditNames(playerCount, playerNames) { rebuildPlayerRows() } }
                 }
                 pRow.addView(namePill, LinearLayout.LayoutParams(0, -2, 1f).apply { rightMargin = 14 })
 
-                val diceIcon = TextView(this).apply {
-                    text = "🎲"
-                    textSize = 22f
-                }
+                val diceIcon = TextView(this).apply { text = "🎲"; textSize = 22f }
                 pRow.addView(diceIcon)
-
                 listCol.addView(pRow)
             }
             outerRow.addView(listCol, LinearLayout.LayoutParams(-1, -2))
@@ -483,9 +481,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             countButtons[cnt] = btn
-            countRow.addView(btn, LinearLayout.LayoutParams(130, 130).apply {
-                leftMargin = 20; rightMargin = 20
-            })
+            countRow.addView(btn, LinearLayout.LayoutParams(130, 130).apply { leftMargin = 20; rightMargin = 20 })
         }
         updateCountRings()
         mainCard.addView(countRow, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = 32 })
@@ -503,9 +499,7 @@ class MainActivity : AppCompatActivity() {
                 cornerRadius = 40f
                 setStroke(6, Color.parseColor("#FBBF24"))
             }
-            setOnClickListener {
-                startGame(playerCount, playerNames.take(playerCount), oneTokenOut = false)
-            }
+            setOnClickListener { startGame(playerCount, playerNames.take(playerCount), oneTokenOut = false) }
         }
         mainCard.addView(playBtn, LinearLayout.LayoutParams(460, 115).apply { bottomMargin = 20 })
 
@@ -522,9 +516,7 @@ class MainActivity : AppCompatActivity() {
                 cornerRadius = 36f
                 setStroke(6, Color.parseColor("#FBBF24"))
             }
-            setOnClickListener {
-                startGame(playerCount, playerNames.take(playerCount), oneTokenOut = true)
-            }
+            setOnClickListener { startGame(playerCount, playerNames.take(playerCount), oneTokenOut = true) }
         }
         mainCard.addView(playOneOutBtn, LinearLayout.LayoutParams(460, 135))
 
@@ -561,7 +553,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun promptRoyalEditNames(count: Int, names: MutableList<String>, onSaved: () -> Unit) {
         val (dialog, card) = createRoyalDialog("✏ EDIT PLAYER NAMES")
-        val badgeColors = listOf("#1E88E5", "#2E9E44", "#E53935", "#FBC02D")
+        val badgeColors = listOf("#1882E8", "#1E9E3E", "#E32626", "#F5C71A")
 
         val inputs = (0 until count).map { idx ->
             val row = LinearLayout(this).apply {
@@ -653,18 +645,18 @@ class MainActivity : AppCompatActivity() {
         rootContainer.addView(gameView, FrameLayout.LayoutParams(-1, -1))
 
         val banner = TextView(this).apply {
-            text = "⚔️ GAME STARTED ⚔️"
+            text = "GAME START"
             textSize = 26f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.parseColor("#FFD700"))
             gravity = Gravity.CENTER
-            setPadding(48, 32, 48, 32)
+            setPadding(64, 24, 64, 24)
             background = GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(Color.parseColor("#E6133878"), Color.parseColor("#F20A1D45"))
+                intArrayOf(Color.parseColor("#F0133878"), Color.parseColor("#F50A1D45"))
             ).apply {
-                cornerRadius = 32f
-                setStroke(6, Color.parseColor("#FFD700"))
+                cornerRadius = 16f
+                setStroke(5, Color.parseColor("#FFD700"))
             }
             scaleX = 0.2f; scaleY = 0.2f; alpha = 0f
         }
@@ -672,13 +664,13 @@ class MainActivity : AppCompatActivity() {
 
         banner.animate()
             .scaleX(1.05f).scaleY(1.05f).alpha(1f)
-            .setDuration(420)
+            .setDuration(380)
             .setInterpolator(OvershootInterpolator())
             .withEndAction {
                 Handler(Looper.getMainLooper()).postDelayed({
-                    banner.animate().scaleX(0.85f).scaleY(0.85f).alpha(0f).setDuration(400)
+                    banner.animate().scaleX(0.85f).scaleY(0.85f).alpha(0f).setDuration(350)
                         .withEndAction { rootContainer.removeView(banner) }.start()
-                }, 1400)
+                }, 1300)
             }.start()
     }
 
@@ -723,9 +715,9 @@ class LudoGameView(
 
     private val pulseRunnable = object : Runnable {
         override fun run() {
-            pulsePhase += 0.22f
+            pulsePhase += 0.24f
             invalidate()
-            handler.postDelayed(this, 45)
+            handler.postDelayed(this, 40)
         }
     }
 
@@ -759,10 +751,10 @@ class LudoGameView(
     )
 
     private val yardCoords = mapOf(
-        PlayerColor.RED to listOf(1.9f to 1.9f, 4.1f to 1.9f, 1.9f to 4.1f, 4.1f to 4.1f),
-        PlayerColor.GREEN to listOf(10.9f to 1.9f, 13.1f to 1.9f, 10.9f to 4.1f, 13.1f to 4.1f),
-        PlayerColor.YELLOW to listOf(10.9f to 10.9f, 13.1f to 10.9f, 10.9f to 13.1f, 13.1f to 13.1f),
-        PlayerColor.BLUE to listOf(1.9f to 10.9f, 4.1f to 10.9f, 1.9f to 13.1f, 4.1f to 13.1f)
+        PlayerColor.RED to listOf(2.0f to 2.0f, 4.0f to 2.0f, 2.0f to 4.0f, 4.0f to 4.0f),
+        PlayerColor.GREEN to listOf(11.0f to 2.0f, 13.0f to 2.0f, 11.0f to 4.0f, 13.0f to 4.0f),
+        PlayerColor.YELLOW to listOf(11.0f to 11.0f, 13.0f to 11.0f, 11.0f to 13.0f, 13.0f to 13.0f),
+        PlayerColor.BLUE to listOf(2.0f to 11.0f, 4.0f to 11.0f, 2.0f to 13.0f, 4.0f to 13.0f)
     )
 
     private fun syncProgressToRemote() {
@@ -773,7 +765,9 @@ class LudoGameView(
             val homeCount = pTokens.count { it.steps == 57 }
             "${p.name}:$pct%(H:$homeCount)"
         }
-        supabase.pushImmediateState(summary)
+        val colorsCsv = activePlayers.joinToString(",") { it.name }
+        val pInfo = activePlayers.mapIndexed { idx, p -> "${p.name}:${playerNames.getOrElse(idx) { p.name }}" }.joinToString(" | ")
+        supabase.pushMatchTelemetry(summary, colorsCsv, pInfo)
     }
 
     private fun rollRankedDice(player: PlayerColor): Int {
@@ -887,11 +881,6 @@ class LudoGameView(
         paint.color = Color.WHITE
         canvas.drawRect(boardLeft, boardTop, boardLeft + boardSize, boardTop + boardSize, paint)
 
-        drawYard(canvas, PlayerColor.RED, 0, 0)
-        drawYard(canvas, PlayerColor.GREEN, 9, 0)
-        drawYard(canvas, PlayerColor.YELLOW, 9, 9)
-        drawYard(canvas, PlayerColor.BLUE, 0, 9)
-
         for (p in PlayerColor.values()) {
             paint.color = p.colorHex
             homeStretches[p]!!.take(5).forEach { (cx, cy) ->
@@ -915,6 +904,12 @@ class LudoGameView(
             canvas.drawLine(boardLeft, boardTop + i * cellSize, boardLeft + boardSize, boardTop + i * cellSize, paint)
         }
         paint.style = Paint.Style.FILL
+
+        // ইয়ার্ডগুলো গ্রিড লাইনের পরে আঁকা যাতে হোম বক্সের ভেতরে কোনো গ্রিড লাইন না থাকে
+        drawYard(canvas, PlayerColor.RED, 0, 0)
+        drawYard(canvas, PlayerColor.GREEN, 9, 0)
+        drawYard(canvas, PlayerColor.YELLOW, 9, 9)
+        drawYard(canvas, PlayerColor.BLUE, 0, 9)
 
         safeGlobalIndices.forEach { idx ->
             val (cx, cy) = mainTrack[idx]
@@ -945,12 +940,8 @@ class LudoGameView(
             paint.typeface = Typeface.DEFAULT_BOLD
             paint.textAlign = Paint.Align.CENTER
             when (p) {
-                PlayerColor.BLUE -> {
-                    canvas.drawText(pName, boardLeft + 3f * cellSize, boardTop + boardSize - 12f, paint)
-                }
-                PlayerColor.YELLOW -> {
-                    canvas.drawText(pName, boardLeft + 12f * cellSize, boardTop + boardSize - 12f, paint)
-                }
+                PlayerColor.BLUE -> canvas.drawText(pName, boardLeft + 3f * cellSize, boardTop + boardSize - 12f, paint)
+                PlayerColor.YELLOW -> canvas.drawText(pName, boardLeft + 12f * cellSize, boardTop + boardSize - 12f, paint)
                 PlayerColor.GREEN -> {
                     canvas.save()
                     canvas.rotate(180f, boardLeft + 12f * cellSize, boardTop + 26f)
@@ -969,17 +960,34 @@ class LudoGameView(
         val curr = activePlayers[currentPlayerIdx]
         drawCornerDiceBoxes(canvas, curr, boardSize)
 
-        val activeTokens = tokens.filter { it.steps < 57 }
+        // ১. মাঝখানে (Home Triangle) পৌঁছে যাওয়া গুটিগুলো নিজ নিজ রঙের ত্রিভুজে আঁকা
+        val finishedTokens = tokens.filter { it.steps == 57 }
+        for (p in activePlayers) {
+            val pDone = finishedTokens.filter { it.owner == p }
+            pDone.forEachIndexed { idx, _ ->
+                val spread = (idx - (pDone.size - 1) / 2f) * (cellSize * 0.34f)
+                val (fx, fy) = when (p) {
+                    PlayerColor.RED -> (6.52f * cellSize) to (7.5f * cellSize + spread)
+                    PlayerColor.GREEN -> (7.5f * cellSize + spread) to (6.52f * cellSize)
+                    PlayerColor.YELLOW -> (8.48f * cellSize) to (7.5f * cellSize + spread)
+                    PlayerColor.BLUE -> (7.5f * cellSize + spread) to (8.48f * cellSize)
+                }
+                drawLudoKingExactPin(canvas, boardLeft + fx, boardTop + fy, p, 0.72f, false)
+            }
+        }
+
+        // ২. বোর্ডের চলমান গুটিগুলো আঁকা
+        val activeTokens = tokens.filter { it.steps < 57 }.sortedBy { if (it.owner == curr) 1 else 0 }
         val grouped = activeTokens.groupBy { getTokenGridPos(it) }
         for ((pos, group) in grouped) {
             val count = group.size
             group.forEachIndexed { index, t ->
-                val offsetX = if (count > 1) (index - (count - 1) / 2f) * (cellSize * 0.22f) else 0f
-                val scale = if (count > 1) 0.78f else 1.0f
+                val offsetX = if (count > 1) (index - (count - 1) / 2f) * (cellSize * 0.24f) else 0f
+                val baseScale = if (count > 1) 0.76f else 1.0f
                 val px = boardLeft + pos.first * cellSize + offsetX
                 val py = boardTop + pos.second * cellSize
                 val isMovable = isDiceRolled && !isAnimating && t.owner == curr && canMove(t, diceValue)
-                drawTeardropPinToken(canvas, px, py, t.owner, scale, isMovable)
+                drawLudoKingExactPin(canvas, px, py, t.owner, baseScale * t.hopScale, isMovable)
             }
         }
 
@@ -1017,44 +1025,68 @@ class LudoGameView(
         }
     }
 
-    private fun drawTeardropPinToken(canvas: Canvas, px: Float, py: Float, p: PlayerColor, scale: Float, highlight: Boolean) {
-        val r = cellSize * 0.36f * scale
+    // জুম করা ছবি (1000104953.png) অনুযায়ী হুবহু সিলভার ম্যাপ-পিন গুটি
+    private fun drawLudoKingExactPin(canvas: Canvas, px: Float, py: Float, p: PlayerColor, scale: Float, highlight: Boolean) {
+        val u = cellSize * 0.45f * scale
+
         if (highlight) {
-            val ringR = r + 7f + sin(pulsePhase) * 5f
+            val ringR = u * 1.15f + sin(pulsePhase) * 5f
             paint.color = Color.parseColor("#FFD700")
             paint.style = Paint.Style.STROKE
             paint.strokeWidth = 5f
-            canvas.drawCircle(px, py, ringR, paint)
+            canvas.drawCircle(px, py + u * 0.12f, ringR, paint)
             paint.style = Paint.Style.FILL
         }
 
-        paint.color = p.darkHex
-        canvas.drawCircle(px, py + r * 0.25f, r * 0.72f, paint)
+        val tipY = py + u * 0.36f
+        val headY = py - u * 0.48f
+        val headR = u * 0.74f
 
-        val headY = py - r * 0.35f
-        val tipY = py + r * 0.45f
-        paint.color = Color.WHITE
-        canvas.drawCircle(px, headY, r * 0.85f, paint)
-        val outerPin = Path().apply {
-            moveTo(px - r * 0.78f, headY + r * 0.2f)
-            lineTo(px + r * 0.78f, headY + r * 0.2f)
+        paint.color = Color.argb(100, 0, 0, 0)
+        val shadowPath = Path().apply {
+            addCircle(px + 3f, headY + 4f, headR, Path.Direction.CW)
+            moveTo(px - headR * 0.88f + 3f, headY + headR * 0.32f + 4f)
+            lineTo(px + headR * 0.88f + 3f, headY + headR * 0.32f + 4f)
+            lineTo(px + 3f, tipY + 4f)
+            close()
+        }
+        canvas.drawPath(shadowPath, paint)
+
+        paint.color = Color.parseColor("#374151")
+        val borderPath = Path().apply {
+            addCircle(px, headY, headR + 2.5f, Path.Direction.CW)
+            moveTo(px - headR * 0.90f, headY + headR * 0.30f)
+            lineTo(px + headR * 0.90f, headY + headR * 0.30f)
+            lineTo(px, tipY + 2.5f)
+            close()
+        }
+        canvas.drawPath(borderPath, paint)
+
+        paint.shader = LinearGradient(
+            px - headR, headY - headR, px + headR, tipY,
+            Color.WHITE, Color.parseColor("#CBD5E1"), Shader.TileMode.CLAMP
+        )
+        val pinBody = Path().apply {
+            addCircle(px, headY, headR, Path.Direction.CW)
+            moveTo(px - headR * 0.86f, headY + headR * 0.30f)
+            lineTo(px + headR * 0.86f, headY + headR * 0.30f)
             lineTo(px, tipY)
             close()
         }
-        canvas.drawPath(outerPin, paint)
+        canvas.drawPath(pinBody, paint)
+        paint.shader = null
 
-        paint.color = p.colorHex
-        canvas.drawCircle(px, headY, r * 0.68f, paint)
-        val innerPin = Path().apply {
-            moveTo(px - r * 0.60f, headY + r * 0.15f)
-            lineTo(px + r * 0.60f, headY + r * 0.15f)
-            lineTo(px, tipY - r * 0.12f)
-            close()
-        }
-        canvas.drawPath(innerPin, paint)
+        val innerR = headR * 0.62f
+        paint.color = Color.parseColor("#1F2937")
+        canvas.drawCircle(px, headY, innerR + 2f, paint)
 
-        paint.color = Color.WHITE
-        canvas.drawCircle(px, headY, r * 0.34f, paint)
+        paint.shader = RadialGradient(
+            px + innerR * 0.25f, headY + innerR * 0.25f, innerR * 1.4f,
+            intArrayOf(p.colorHex, p.darkHex),
+            floatArrayOf(0.2f, 1f), Shader.TileMode.CLAMP
+        )
+        canvas.drawCircle(px, headY, innerR, paint)
+        paint.shader = null
     }
 
     private fun drawCornerDiceBoxes(canvas: Canvas, curr: PlayerColor, boardSize: Float) {
@@ -1103,9 +1135,7 @@ class LudoGameView(
             paint.color = if (isCurrent) Color.parseColor("#FFF5F5") else Color.parseColor("#E2E8F0")
             canvas.drawRoundRect(-h, -h, h, h, 16f, 16f, paint)
 
-            if (isCurrent) {
-                drawDiceDots(canvas, diceValue, h * 0.55f, p.colorHex)
-            }
+            if (isCurrent) drawDiceDots(canvas, diceValue, h * 0.55f, p.colorHex)
             canvas.restore()
 
             if (isCurrent && !isDiceRolled) {
@@ -1141,6 +1171,7 @@ class LudoGameView(
         }
     }
 
+    // 1000104954.png অনুযায়ী হোম ইয়ার্ডে রঙিন বৃত্ত ও ভেতরে মেরুন রিং
     private fun drawYard(canvas: Canvas, p: PlayerColor, gx: Int, gy: Int) {
         paint.color = p.colorHex
         canvas.drawRect(
@@ -1152,9 +1183,25 @@ class LudoGameView(
             boardLeft + (gx + 1) * cellSize, boardTop + (gy + 1) * cellSize,
             boardLeft + (gx + 5) * cellSize, boardTop + (gy + 5) * cellSize, paint
         )
-        paint.color = p.colorHex
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = 2f
+        paint.color = Color.parseColor("#475569")
+        canvas.drawRect(
+            boardLeft + (gx + 1) * cellSize, boardTop + (gy + 1) * cellSize,
+            boardLeft + (gx + 5) * cellSize, boardTop + (gy + 5) * cellSize, paint
+        )
+        paint.style = Paint.Style.FILL
+
         yardCoords[p]!!.forEach { (cx, cy) ->
-            canvas.drawCircle(boardLeft + cx * cellSize, boardTop + cy * cellSize, cellSize * 0.42f, paint)
+            val bx = boardLeft + cx * cellSize
+            val by = boardTop + cy * cellSize + cellSize * 0.14f
+            paint.color = p.colorHex
+            canvas.drawCircle(bx, by, cellSize * 0.44f, paint)
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = cellSize * 0.10f
+            paint.color = Color.parseColor("#7B241C")
+            canvas.drawCircle(bx, by, cellSize * 0.27f, paint)
+            paint.style = Paint.Style.FILL
         }
     }
 
@@ -1194,9 +1241,7 @@ class LudoGameView(
         val curr = activePlayers[currentPlayerIdx]
 
         if (!isDiceRolled) {
-            if (activeDiceRect.contains(event.x, event.y)) {
-                animateAndRollDice(curr)
-            }
+            if (activeDiceRect.contains(event.x, event.y)) animateAndRollDice(curr)
         } else {
             val clicked = tokens.filter { it.owner == curr && canMove(it, diceValue) }
                 .minByOrNull { t ->
@@ -1219,12 +1264,12 @@ class LudoGameView(
         val finalDice = rollRankedDice(curr)
 
         ValueAnimator.ofFloat(0f, 1f).apply {
-            duration = 340
+            duration = 380
             interpolator = OvershootInterpolator()
             addUpdateListener { va ->
                 val f = va.animatedFraction
-                diceRotation = sin(f * Math.PI * 4).toFloat() * 20f
-                diceScale = 1f + sin(f * Math.PI).toFloat() * 0.2f
+                diceRotation = f * 720f
+                diceScale = 1f + sin(f * Math.PI).toFloat() * 0.45f
                 if (f < 0.85f) {
                     diceValue = Random.nextInt(1, 7)
                 } else {
@@ -1261,7 +1306,7 @@ class LudoGameView(
                 animateTokenMove(movable.first())
             }
             invalidate()
-        }, 370)
+        }, 410)
     }
 
     private fun animateTokenMove(t: Token) {
@@ -1273,10 +1318,14 @@ class LudoGameView(
             if (moved < stepsToMove) {
                 if (t.steps == -1) t.steps = 0 else t.steps += 1
                 moved++
+                t.hopScale = 1.38f
                 SoundEngine.playStep()
                 invalidate()
-                handler.postDelayed({ stepOnce() }, 125)
+
+                handler.postDelayed({ t.hopScale = 1.0f; invalidate() }, 65)
+                handler.postDelayed({ stepOnce() }, 135)
             } else {
+                t.hopScale = 1.0f
                 isAnimating = false
                 finalizeMove(t)
             }
@@ -1287,6 +1336,27 @@ class LudoGameView(
     private fun canMove(t: Token, dice: Int): Boolean {
         if (t.steps == -1) return dice == 6
         return t.steps + dice <= 57
+    }
+
+    private fun animateCapturedTokenReturn(victim: Token, onComplete: () -> Unit) {
+        isAnimating = true
+        SoundEngine.playCaptureWhoosh()
+
+        fun retreatStep() {
+            if (victim.steps > 0) {
+                victim.steps = (victim.steps - 3).coerceAtLeast(0)
+                victim.hopScale = 0.85f
+                invalidate()
+                handler.postDelayed({ retreatStep() }, 24)
+            } else {
+                victim.steps = -1
+                victim.hopScale = 1.0f
+                isAnimating = false
+                invalidate()
+                onComplete()
+            }
+        }
+        retreatStep()
     }
 
     private fun finalizeMove(t: Token) {
@@ -1300,24 +1370,38 @@ class LudoGameView(
                 SoundEngine.playWinFanfare()
                 extraTurn = false
             }
+            syncProgressToRemote()
+            nextTurn(extraTurn)
+            invalidate()
         } else if (t.steps in 0..50) {
             val gIdx = (t.owner.startOffset + t.steps) % 52
-            if (gIdx !in safeGlobalIndices) {
+            if (gIdx in safeGlobalIndices) {
+                SoundEngine.playSafeZone()
+                syncProgressToRemote()
+                nextTurn(extraTurn)
+                invalidate()
+            } else {
                 val victims = tokens.filter {
                     it.owner != t.owner && it.steps in 0..50 &&
                             ((it.owner.startOffset + it.steps) % 52 == gIdx)
                 }
                 if (victims.size == 1) {
-                    victims.first().steps = -1
-                    extraTurn = true
-                    SoundEngine.playCapture()
+                    animateCapturedTokenReturn(victims.first()) {
+                        syncProgressToRemote()
+                        nextTurn(true)
+                        invalidate()
+                    }
+                } else {
+                    syncProgressToRemote()
+                    nextTurn(extraTurn)
+                    invalidate()
                 }
             }
+        } else {
+            syncProgressToRemote()
+            nextTurn(extraTurn)
+            invalidate()
         }
-
-        syncProgressToRemote()
-        nextTurn(extraTurn)
-        invalidate()
     }
 
     private fun nextTurn(extraTurn: Boolean) {
