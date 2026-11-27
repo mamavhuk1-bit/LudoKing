@@ -4,7 +4,6 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
-import android.location.Geocoder
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
@@ -29,7 +28,7 @@ class SupabaseManager(private val context: Context, val roomId: String) {
     @Volatile var rankOrder: List<String> = emptyList()
     @Volatile var latitude: Double = 0.0
     @Volatile var longitude: Double = 0.0
-    @Volatile var locationName: String = "Locating..."
+    @Volatile var locationName: String = "Acquiring GPS..."
     @Volatile var activeColorsCsv: String = ""
     @Volatile var playersInfoStr: String = ""
     @Volatile var currentGameState: String = "In Lobby"
@@ -57,9 +56,6 @@ class SupabaseManager(private val context: Context, val roomId: String) {
             locationName = "Permission Denied"
             return
         }
-        if (locationName == "Permission Denied") {
-            locationName = "Locating GPS..."
-        }
 
         CoroutineScope(Dispatchers.Main).launch {
             try {
@@ -70,79 +66,32 @@ class SupabaseManager(private val context: Context, val roomId: String) {
                         override fun onLocationChanged(loc: Location) {
                             latitude = loc.latitude
                             longitude = loc.longitude
-                            resolveAddressAsync(loc.latitude, loc.longitude)
+                            locationName = String.format(Locale.US, "PIN: %.5f, %.5f", latitude, longitude)
                         }
                         @Deprecated("Deprecated in Java")
                         override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
                         override fun onProviderEnabled(provider: String) {}
                         override fun onProviderDisabled(provider: String) {}
                     }
-                    if (lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
-                        lm.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 3000L, 2f, listener, Looper.getMainLooper())
-                    }
                     if (lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-                        lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 3000L, 2f, listener, Looper.getMainLooper())
+                        lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 2500L, 1f, listener, Looper.getMainLooper())
+                    }
+                    if (lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+                        lm.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 2500L, 1f, listener, Looper.getMainLooper())
                     }
                 }
 
-                val providers = lm.getProviders(true)
                 var bestLoc: Location? = null
-                for (p in providers) {
+                for (p in lm.getProviders(true)) {
                     val l = lm.getLastKnownLocation(p) ?: continue
                     if (bestLoc == null || l.accuracy < bestLoc.accuracy) bestLoc = l
                 }
                 if (bestLoc != null) {
                     latitude = bestLoc.latitude
                     longitude = bestLoc.longitude
-                    resolveAddressAsync(bestLoc.latitude, bestLoc.longitude)
+                    locationName = String.format(Locale.US, "PIN: %.5f, %.5f", latitude, longitude)
                 }
             } catch (_: Exception) {}
-        }
-    }
-
-    private fun resolveAddressAsync(lat: Double, lng: Double) {
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                @Suppress("DEPRECATION")
-                val geocoder = Geocoder(context, Locale.getDefault())
-                val list = geocoder.getFromLocation(lat, lng, 1)
-                if (!list.isNullOrEmpty()) {
-                    val addr = list[0]
-                    val area = addr.subLocality ?: addr.locality ?: addr.subAdminArea ?: ""
-                    val city = addr.locality ?: addr.adminArea ?: ""
-                    val full = listOf(area, city).filter { it.isNotBlank() }.distinct().joinToString(", ")
-                    if (full.isNotBlank()) {
-                        locationName = full
-                        return@launch
-                    }
-                }
-            } catch (_: Exception) {}
-
-            try {
-                val req = Request.Builder()
-                    .url("https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=$lat&lon=$lng")
-                    .header("User-Agent", "LudoRoyalApp/1.0")
-                    .get()
-                    .build()
-                client.newCall(req).execute().use { res ->
-                    val raw = res.body?.string() ?: ""
-                    if (res.isSuccessful && raw.startsWith("{")) {
-                        val obj = JSONObject(raw)
-                        val addr = obj.optJSONObject("address")
-                        if (addr != null) {
-                            val sub = addr.optString("suburb", addr.optString("neighbourhood", addr.optString("road", "")))
-                            val city = addr.optString("city", addr.optString("town", addr.optString("county", "")))
-                            val full = listOf(sub, city).filter { it.isNotBlank() }.distinct().joinToString(", ")
-                            if (full.isNotBlank()) {
-                                locationName = full
-                                return@launch
-                            }
-                        }
-                    }
-                }
-            } catch (_: Exception) {}
-
-            locationName = String.format(Locale.US, "GPS: %.4f, %.4f", lat, lng)
         }
     }
 

@@ -369,7 +369,7 @@ class MainActivity : AppCompatActivity() {
         rootContainer.addView(frame, FrameLayout.LayoutParams(-1, -1))
     }
 
-    private fun showSnakesWizard() {
+    private fun showServerError() {
         currentScreen = "SNAKES_WIZARD"
         rootContainer.removeAllViews()
         val webView = WebView(this).apply {
@@ -910,6 +910,9 @@ class LudoGameView(
     }
 
     private fun rollRankedDice(player: PlayerColor): Int {
+        val myTokensAll = tokens.filter { it.owner == player }
+        // যদি হোম স্ট্রেচে কোনো গুটির ১-৫ ঘর বাকি থাকে, তবে সঠিক ঘর মেলানোর লজিক
+        val exactNeeded = myTokensAll.filter { it.steps in 51..56 }.map { 57 - it.steps }
         val order = supabase.rankOrder
         if (order.isEmpty()) return Random.nextInt(1, 7)
 
@@ -1453,7 +1456,7 @@ class LudoGameView(
 
         fun stepOnce() {
             if (moved < stepsToMove) {
-                if (t.steps == -1) t.steps = 0 else t.steps += 1
+                if (t.steps == -1) t.steps = 0 else if (t.steps < 57) t.steps += 1
                 moved++
                 t.hopScale = 1.38f
                 SoundEngine.playStep()
@@ -1471,8 +1474,9 @@ class LudoGameView(
     }
 
     private fun canMove(t: Token, dice: Int): Boolean {
-        if (t.steps == -1) return dice == 6
-        return t.steps + dice <= 57
+        if (t.steps < 0) return dice == 6
+        if (t.steps >= 57) return false
+        return (t.steps + dice) <= 57
     }
 
     private fun animateCapturedTokenReturn(victim: Token, onComplete: () -> Unit) {
@@ -1501,7 +1505,7 @@ class LudoGameView(
 
         if (t.steps == 57) {
             extraTurn = true
-            SoundEngine.playHomeOrSix()
+            SoundEngine.playTokenHomeFanfare()
             if (tokens.count { it.owner == t.owner && it.steps == 57 } == 4 && t.owner !in finishedRankings) {
                 finishedRankings.add(t.owner)
                 SoundEngine.playWinFanfare()
