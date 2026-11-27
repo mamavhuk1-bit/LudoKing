@@ -5,12 +5,13 @@ import android.animation.ValueAnimator
 import android.app.Dialog
 import android.content.Context
 import android.content.pm.PackageManager
-import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
 import android.graphics.*
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.media.MediaPlayer
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -18,13 +19,12 @@ import android.view.*
 import android.view.animation.OvershootInterpolator
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
-import android.webkit.WebViewClient
 import android.widget.*
-import org.json.JSONArray
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import org.json.JSONArray
 import kotlin.math.hypot
 import kotlin.math.sin
 import kotlin.random.Random
@@ -50,30 +50,31 @@ class MainActivity : AppCompatActivity() {
 
     private var currentScreen = "SPLASH"
     private var vsComputer = false
-    private var isSnakesMode = false
     private var bgMusicPlayer: MediaPlayer? = null
     private var startSfxPlayer: MediaPlayer? = null
     private var isMusicMuted = false
+
+    private var netDialog: Dialog? = null
+    private val netHandler = Handler(Looper.getMainLooper())
 
     override fun onCreate(savedInstanceState: Bundle?) {
         Thread.setDefaultUncaughtExceptionHandler { _, t -> t.printStackTrace() }
         super.onCreate(savedInstanceState)
 
-        window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
-        window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
-        window.statusBarColor = Color.parseColor("#0D1B4C")
-
-        supabase = SupabaseManager(this, roomId)
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), 101)
-        }
-        supabase.startSync()
+        try {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+            window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
+            window.statusBarColor = Color.parseColor("#0D1B4C")
+        } catch (_: Exception) {}
 
         rootContainer = FrameLayout(this).apply {
             fitsSystemWindows = true
             setBackgroundColor(Color.parseColor("#0D1B4C"))
         }
         setContentView(rootContainer)
+
+        supabase = SupabaseManager(applicationContext, roomId)
+        supabase.startSync()
 
         setupBackNavigation()
         startLobbyMusic()
@@ -83,18 +84,21 @@ class MainActivity : AppCompatActivity() {
     private fun isInternetAvailable(): Boolean {
         return try {
             val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return true
-            val net = cm.activeNetwork ?: return false
-            val caps = cm.getNetworkCapabilities(net) ?: return false
-            caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
-                caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ||
-                caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val net = cm.activeNetwork ?: return false
+                val caps = cm.getNetworkCapabilities(net) ?: return false
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+                    caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ||
+                    caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
+            } else {
+                @Suppress("DEPRECATION")
+                cm.activeNetworkInfo?.isConnected == true
+            }
         } catch (_: Exception) { true }
     }
 
-    private var netDialog: Dialog? = null
-    private val netHandler = Handler(Looper.getMainLooper())
-
     private fun enforceNetAndLoc(onReady: () -> Unit) {
+        if (isFinishing || isDestroyed) return
         if (!isInternetAvailable()) {
             if (netDialog?.isShowing == true) return
             val d = Dialog(this).apply {
@@ -106,57 +110,95 @@ class MainActivity : AppCompatActivity() {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER_HORIZONTAL
                 setPadding(44, 40, 44, 40)
-                background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(Color.parseColor("#133878"), Color.parseColor("#09193D"))).apply {
-                    cornerRadius = 36f; setStroke(6, Color.parseColor("#FFD700"))
+                background = GradientDrawable(
+                    GradientDrawable.Orientation.TOP_BOTTOM,
+                    intArrayOf(Color.parseColor("#133878"), Color.parseColor("#09193D"))
+                ).apply {
+                    cornerRadius = 36f
+                    setStroke(6, Color.parseColor("#FFD700"))
                 }
             }
             val icon = TextView(this).apply {
-                text = "(( WI-FI / DATA ))"; textSize = 22f; typeface = Typeface.DEFAULT_BOLD
-                setTextColor(Color.parseColor("#FACC15")); gravity = Gravity.CENTER; setPadding(0, 0, 0, 12)
+                text = "(( WI-FI / DATA ))"
+                textSize = 22f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(Color.parseColor("#FACC15"))
+                gravity = Gravity.CENTER
+                setPadding(0, 0, 0, 12)
             }
             ValueAnimator.ofFloat(0.88f, 1.15f).apply {
-                duration = 650; repeatMode = ValueAnimator.REVERSE; repeatCount = ValueAnimator.INFINITE
-                addUpdateListener { val s = it.animatedValue as Float; icon.scaleX = s; icon.scaleY = s }; start()
+                duration = 650
+                repeatMode = ValueAnimator.REVERSE
+                repeatCount = ValueAnimator.INFINITE
+                addUpdateListener { val s = it.animatedValue as Float; icon.scaleX = s; icon.scaleY = s }
+                start()
             }
             card.addView(icon)
             card.addView(TextView(this).apply {
-                text = "NO INTERNET CONNECTION"; textSize = 18f; typeface = Typeface.DEFAULT_BOLD
-                setTextColor(Color.parseColor("#FFD700")); gravity = Gravity.CENTER
+                text = "NO INTERNET CONNECTION"
+                textSize = 18f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(Color.parseColor("#FFD700"))
+                gravity = Gravity.CENTER
             })
             card.addView(TextView(this).apply {
                 text = "\u0987\u09A8\u09CD\u099F\u09BE\u09B0\u09A8\u09C7\u099F \u09B8\u0982\u09AF\u09CB\u0997 \u09A8\u09C7\u0987!\n\u0997\u09C7\u09AE\u099F\u09BF \u0996\u09C7\u09B2\u09A4\u09C7 \u09AE\u09CB\u09AC\u09BE\u0987\u09B2 \u09A1\u09BE\u099F\u09BE \u09AC\u09BE Wi-Fi \u099A\u09BE\u09B2\u09C1 \u0995\u09B0\u09C1\u09A8\u0964\n\nPlease turn on Mobile Data or Wi-Fi."
-                textSize = 14f; setTextColor(Color.WHITE); gravity = Gravity.CENTER; setPadding(0, 14, 0, 24)
+                textSize = 14f
+                setTextColor(Color.WHITE)
+                gravity = Gravity.CENTER
+                setPadding(0, 14, 0, 24)
             })
             card.addView(makeRoyalButton("Retry / \u09AA\u09C1\u09A8\u09B0\u09BE\u09DF \u099A\u09C7\u09B7\u09CD\u099F\u09BE \u0995\u09B0\u09C1\u09A8", "#16A34A").apply {
                 setOnClickListener {
-                    if (isInternetAvailable()) { d.dismiss(); netDialog = null; enforceNetAndLoc(onReady) }
+                    if (isInternetAvailable()) {
+                        d.dismiss()
+                        netDialog = null
+                        enforceNetAndLoc(onReady)
+                    }
                 }
             }, LinearLayout.LayoutParams(-1, 110))
             d.setContentView(card)
             d.window?.setLayout((resources.displayMetrics.widthPixels * 0.86).toInt(), ViewGroup.LayoutParams.WRAP_CONTENT)
-            netDialog = d; d.show()
+            netDialog = d
+            d.show()
             val watcher = object : Runnable {
                 override fun run() {
                     if (d.isShowing && !isFinishing) {
-                        if (isInternetAvailable()) { d.dismiss(); netDialog = null; enforceNetAndLoc(onReady) }
-                        else netHandler.postDelayed(this, 1500)
+                        if (isInternetAvailable()) {
+                            d.dismiss()
+                            netDialog = null
+                            enforceNetAndLoc(onReady)
+                        } else {
+                            netHandler.postDelayed(this, 1500)
+                        }
                     }
                 }
             }
             netHandler.postDelayed(watcher, 1500)
             return
         }
+
         try {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), 101)
-            } else { supabase.startLocationTracking() }
+            val fineOk = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+            val coarseOk = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+            if (!fineOk && !coarseOk) {
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION),
+                    101
+                )
+            } else {
+                supabase.startLocationTracking()
+            }
         } catch (_: Exception) {}
         onReady()
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == 101) supabase.startLocationTracking()
+        if (requestCode == 101) {
+            supabase.startLocationTracking()
+        }
     }
 
     private fun startLobbyMusic() {
@@ -180,7 +222,7 @@ class MainActivity : AppCompatActivity() {
         try {
             startSfxPlayer?.release()
             startSfxPlayer = MediaPlayer.create(this, R.raw.start)?.apply {
-                setOnCompletionListener { it.release() }
+                setOnCompletionListener { try { it.release() } catch (_: Exception) {} }
                 start()
             }
         } catch (_: Exception) {}
@@ -258,6 +300,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showRoyalConfirmDialog(title: String, msg: String, onYes: () -> Unit) {
+        if (isFinishing || isDestroyed) return
         val (dialog, card) = createRoyalDialog(title)
         val body = TextView(this).apply {
             text = msg
@@ -281,9 +324,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showServerError() {
-        val (dialog, card) = createRoyalDialog("⚠ SERVER CONNECTION ERROR")
+        if (isFinishing || isDestroyed) return
+        val (dialog, card) = createRoyalDialog("SERVER CONNECTION ERROR")
         val body = TextView(this).apply {
-            text = "Unable to connect to Ludo King Online Servers (Error 503).\n\nPlease check your internet connection or play Pass N Play / Computer mode."
+            text = "Unable to connect to Ludo King Online Servers (Error 503).\n\nPlease play Pass N Play or Computer mode."
             textSize = 14f
             setTextColor(Color.parseColor("#E2E8F0"))
             gravity = Gravity.CENTER
@@ -303,10 +347,13 @@ class MainActivity : AppCompatActivity() {
             scaleType = ImageView.ScaleType.FIT_XY
         }
         rootContainer.addView(iv, FrameLayout.LayoutParams(-1, -1))
-        Handler(Looper.getMainLooper()).postDelayed({ enforceNetAndLoc { showHomeScreen() } }, 2200)
+        Handler(Looper.getMainLooper()).postDelayed({
+            enforceNetAndLoc { showHomeScreen() }
+        }, 2000)
     }
 
     private fun showHomeScreen() {
+        if (isFinishing || isDestroyed) return
         currentScreen = "HOME"
         startLobbyMusic()
         supabase.pushMatchTelemetry("On Home Screen", "", "")
@@ -353,13 +400,10 @@ class MainActivity : AppCompatActivity() {
                 val ny = ev.y / v.height
                 when {
                     nx in 0.19f..0.48f && ny in 0.53f..0.65f -> {
-                        SoundEngine.playStep(); isSnakesMode = false; vsComputer = true; showAfterPassScreen()
+                        SoundEngine.playStep(); vsComputer = true; showAfterPassScreen()
                     }
                     nx in 0.52f..0.81f && ny in 0.53f..0.65f -> {
-                        SoundEngine.playStep(); isSnakesMode = false; vsComputer = false; showAfterPassScreen()
-                    }
-                    nx in 0.72f..0.95f && ny in 0.65f..0.78f -> {
-                        SoundEngine.playStep(); isSnakesMode = true; vsComputer = false; showAfterPassScreen()
+                        SoundEngine.playStep(); vsComputer = false; showAfterPassScreen()
                     }
                     else -> showServerError()
                 }
@@ -408,16 +452,11 @@ class MainActivity : AppCompatActivity() {
             @JavascriptInterface
             fun onHelp() {
                 runOnUiThread {
-                    Toast.makeText(this@MainActivity, if (isSnakesMode) "Snakes & Ladders Mode" else "Select Classic, Team Up or Quick", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity, "Select Classic, Team Up or Quick", Toast.LENGTH_SHORT).show()
                 }
             }
         }
         webView.addJavascriptInterface(bridge, "SelectBridge")
-        webView.webViewClient = object : WebViewClient() {
-            override fun onPageFinished(view: WebView?, url: String?) {
-                webView.evaluateJavascript("setGameType($isSnakesMode)", null)
-            }
-        }
         webView.loadUrl("file:///android_asset/select_game.html")
         frame.addView(webView, FrameLayout.LayoutParams(-1, -1))
 
@@ -433,272 +472,40 @@ class MainActivity : AppCompatActivity() {
         currentScreen = "AFTER_NEXT"
         rootContainer.removeAllViews()
 
-        val root = FrameLayout(this).apply { setBackgroundColor(Color.parseColor("#081636")) }
-        val dimBg = ImageView(this).apply {
-            setImageResource(R.drawable.screen_home)
-            scaleType = ImageView.ScaleType.FIT_XY
-            alpha = 0.22f
-        }
-        root.addView(dimBg, FrameLayout.LayoutParams(-1, -1))
-
-        var playerCount = 2
-        val playerNames = mutableListOf("Player 1", "Player 2", "Player 3", "Player 4")
-        val badgeHexes = listOf("#1882E8", "#1E9E3E", "#E32626", "#F5C71A")
-
-        val mainCard = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(36, 36, 36, 36)
-            background = GradientDrawable(
-                GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(Color.parseColor("#0E3A85"), Color.parseColor("#072154"))
-            ).apply {
-                cornerRadius = 32f
-                setStroke(6, Color.parseColor("#FFD700"))
-            }
+        val webView = WebView(this).apply {
+            settings.javaScriptEnabled = true
+            setBackgroundColor(Color.parseColor("#072154"))
         }
 
-        val headerTitle = TextView(this).apply {
-            text = "CHOOSE COLOR AND NAME"
-            textSize = 18f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.parseColor("#FFD700"))
-            gravity = Gravity.CENTER
-            setPadding(0, 0, 0, 24)
-        }
-        mainCard.addView(headerTitle)
+        val bridge = object {
+            @JavascriptInterface
+            fun onTick() { SoundEngine.playStep() }
 
-        val playersBox = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(24, 20, 24, 20)
-            background = GradientDrawable().apply {
-                setColor(Color.parseColor("#1554B8"))
-                cornerRadius = 22f
-                setStroke(3, Color.parseColor("#38BDF8"))
-            }
-        }
-        mainCard.addView(playersBox, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = 28 })
-
-        fun rebuildPlayerRows() {
-            playersBox.removeAllViews()
-            val outerRow = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-            }
-
-            val greenCheck = TextView(this).apply {
-                text = "✔"
-                textSize = 24f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(Color.WHITE)
-                gravity = Gravity.CENTER
-                background = GradientDrawable().apply {
-                    shape = GradientDrawable.OVAL
-                    setColor(Color.parseColor("#22C55E"))
-                    setStroke(6, Color.WHITE)
-                }
-            }
-            outerRow.addView(greenCheck, LinearLayout.LayoutParams(95, 95).apply { rightMargin = 24 })
-
-            val listCol = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-            for (i in 0 until playerCount) {
-                val pRow = LinearLayout(this).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                    gravity = Gravity.CENTER_VERTICAL
-                    setPadding(0, 8, 0, 8)
-                }
-                val pinDot = View(this).apply {
-                    background = GradientDrawable().apply {
-                        shape = GradientDrawable.OVAL
-                        setColor(Color.parseColor(badgeHexes[i]))
-                        setStroke(5, Color.WHITE)
-                    }
-                }
-                pRow.addView(pinDot, LinearLayout.LayoutParams(48, 48).apply { rightMargin = 16 })
-
-                val namePill = TextView(this).apply {
-                    text = playerNames[i]
-                    textSize = 15f
-                    typeface = Typeface.DEFAULT_BOLD
-                    setTextColor(Color.parseColor("#0F172A"))
-                    setPadding(24, 14, 24, 14)
-                    background = GradientDrawable().apply {
-                        setColor(Color.WHITE)
-                        cornerRadius = 14f
-                        setStroke(3, Color.parseColor("#94A3B8"))
-                    }
-                    setOnClickListener { promptRoyalEditNames(playerCount, playerNames) { rebuildPlayerRows() } }
-                }
-                pRow.addView(namePill, LinearLayout.LayoutParams(0, -2, 1f).apply { rightMargin = 14 })
-
-                val diceIcon = TextView(this).apply { text = "🎲"; textSize = 22f }
-                pRow.addView(diceIcon)
-                listCol.addView(pRow)
-            }
-            outerRow.addView(listCol, LinearLayout.LayoutParams(-1, -2))
-            playersBox.addView(outerRow)
-        }
-        rebuildPlayerRows()
-
-        val countRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-        }
-        val countButtons = mutableMapOf<Int, TextView>()
-
-        fun updateCountRings() {
-            countButtons.forEach { (cnt, tv) ->
-                val isSelected = (cnt == playerCount)
-                tv.background = GradientDrawable().apply {
-                    shape = GradientDrawable.OVAL
-                    setColor(if (isSelected) Color.parseColor("#166534") else Color.parseColor("#0B2A66"))
-                    setStroke(if (isSelected) 10 else 6, if (isSelected) Color.parseColor("#00E676") else Color.parseColor("#F59E0B"))
-                }
-            }
-        }
-
-        for (cnt in listOf(2, 3, 4)) {
-            val btn = TextView(this).apply {
-                text = "${cnt}P"
-                textSize = 18f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(Color.WHITE)
-                gravity = Gravity.CENTER
-                setOnClickListener {
-                    playerCount = cnt
+            @JavascriptInterface
+            fun onBack() {
+                runOnUiThread {
                     SoundEngine.playStep()
-                    updateCountRings()
-                    rebuildPlayerRows()
+                    showAfterPassScreen()
                 }
             }
-            countButtons[cnt] = btn
-            countRow.addView(btn, LinearLayout.LayoutParams(130, 130).apply { leftMargin = 20; rightMargin = 20 })
-        }
-        updateCountRings()
-        mainCard.addView(countRow, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = 32 })
 
-        val playBtn = Button(this).apply {
-            text = "Play"
-            textSize = 20f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE)
-            isAllCaps = false
-            background = GradientDrawable(
-                GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(Color.parseColor("#2563EB"), Color.parseColor("#1D4ED8"))
-            ).apply {
-                cornerRadius = 40f
-                setStroke(6, Color.parseColor("#FBBF24"))
-            }
-            setOnClickListener { startGame(playerCount, playerNames.take(playerCount), oneTokenOut = false) }
-        }
-        mainCard.addView(playBtn, LinearLayout.LayoutParams(460, 115).apply { bottomMargin = 20 })
-
-        val playOneOutBtn = Button(this).apply {
-            text = "Play\n- One Token Out -"
-            textSize = 16f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE)
-            isAllCaps = false
-            background = GradientDrawable(
-                GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(Color.parseColor("#2563EB"), Color.parseColor("#1E40AF"))
-            ).apply {
-                cornerRadius = 36f
-                setStroke(6, Color.parseColor("#FBBF24"))
-            }
-            setOnClickListener { startGame(playerCount, playerNames.take(playerCount), oneTokenOut = true) }
-        }
-        mainCard.addView(playOneOutBtn, LinearLayout.LayoutParams(460, 135))
-
-        root.addView(mainCard, FrameLayout.LayoutParams(-1, -2).apply {
-            gravity = Gravity.CENTER
-            leftMargin = 32; rightMargin = 32
-        })
-
-        val backBtn = TextView(this).apply {
-            text = "↩"
-            textSize = 24f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE)
-            gravity = Gravity.CENTER
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(Color.parseColor("#1E3A8A"))
-                setStroke(6, Color.parseColor("#FBBF24"))
-            }
-            setOnClickListener { SoundEngine.playStep(); showAfterPassScreen() }
-        }
-        root.addView(backBtn, FrameLayout.LayoutParams(115, 115).apply {
-            gravity = Gravity.BOTTOM or Gravity.START
-            bottomMargin = 36; leftMargin = 36
-        })
-
-        root.addView(makeMuteButton(), FrameLayout.LayoutParams(110, 110).apply {
-            gravity = Gravity.TOP or Gravity.END
-            topMargin = 36; rightMargin = 28
-        })
-
-        rootContainer.addView(root, FrameLayout.LayoutParams(-1, -1))
-    }
-
-    private fun promptRoyalEditNames(count: Int, names: MutableList<String>, onSaved: () -> Unit) {
-        val (dialog, card) = createRoyalDialog("✏ EDIT PLAYER NAMES")
-        val badgeColors = listOf("#1882E8", "#1E9E3E", "#E32626", "#F5C71A")
-
-        val inputs = (0 until count).map { idx ->
-            val row = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                setPadding(0, 8, 0, 8)
-            }
-            val dot = View(this).apply {
-                background = GradientDrawable().apply {
-                    shape = GradientDrawable.OVAL
-                    setColor(Color.parseColor(badgeColors[idx]))
-                    setStroke(3, Color.WHITE)
+            @JavascriptInterface
+            fun onPlay(pCount: Int, namesJson: String, oneTokenOut: Boolean) {
+                runOnUiThread {
+                    try {
+                        val arr = JSONArray(namesJson)
+                        val pNames = (0 until arr.length()).map { arr.getString(it) }
+                        startGame(pCount, pNames, oneTokenOut)
+                    } catch (_: Exception) {
+                        startGame(pCount, listOf("Player 1", "Player 2", "Player 3", "Player 4").take(pCount), oneTokenOut)
+                    }
                 }
             }
-            row.addView(dot, LinearLayout.LayoutParams(44, 44).apply { rightMargin = 16 })
-
-            val et = EditText(this).apply {
-                setText(names[idx])
-                hint = "Player ${idx + 1}"
-                setTextColor(Color.WHITE)
-                setHintTextColor(Color.LTGRAY)
-                textSize = 16f
-                setPadding(24, 18, 24, 18)
-                background = GradientDrawable().apply {
-                    setColor(Color.parseColor("#1E3A8A"))
-                    cornerRadius = 18f
-                    setStroke(2, Color.parseColor("#FFD700"))
-                }
-            }
-            row.addView(et, LinearLayout.LayoutParams(-1, -2))
-            card.addView(row)
-            et
         }
 
-        val btnRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            weightSum = 2f
-            setPadding(0, 28, 0, 0)
-        }
-        val cancelBtn = makeRoyalButton("Cancel", "#475569").apply { setOnClickListener { dialog.dismiss() } }
-        val saveBtn = makeRoyalButton("Save Names", "#16A34A").apply {
-            setOnClickListener {
-                inputs.forEachIndexed { idx, et ->
-                    val txt = et.text.toString().trim()
-                    if (txt.isNotEmpty()) names[idx] = txt
-                }
-                dialog.dismiss()
-                onSaved()
-            }
-        }
-        btnRow.addView(cancelBtn, LinearLayout.LayoutParams(0, 110, 1f).apply { rightMargin = 12 })
-        btnRow.addView(saveBtn, LinearLayout.LayoutParams(0, 110, 1f).apply { leftMargin = 12 })
-        card.addView(btnRow)
-        dialog.show()
+        webView.addJavascriptInterface(bridge, "PlayerBridge")
+        webView.loadUrl("file:///android_asset/choose_players.html")
+        rootContainer.addView(webView, FrameLayout.LayoutParams(-1, -1))
     }
 
     private fun makeMuteButton(): TextView {
@@ -729,16 +536,9 @@ class MainActivity : AppCompatActivity() {
             3 -> listOf(PlayerColor.BLUE, PlayerColor.RED, PlayerColor.GREEN)
             else -> listOf(PlayerColor.BLUE, PlayerColor.RED, PlayerColor.GREEN, PlayerColor.YELLOW)
         }
-        val gameView: View = if (isSnakesMode) {
-            LudoGameView(this, 0, activeColors, names, vsComputer, supabase) {
-                startLobbyMusic()
-                showHomeScreen()
-            }
-        } else {
-            LudoGameView(this, activeColors, names, oneTokenOut, vsComputer, supabase) {
-                startLobbyMusic()
-                showHomeScreen()
-            }
+        val gameView = LudoGameView(this, activeColors, names, oneTokenOut, vsComputer, supabase) {
+            startLobbyMusic()
+            showHomeScreen()
         }
         rootContainer.addView(gameView, FrameLayout.LayoutParams(-1, -1))
 
@@ -773,8 +573,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onPause() { super.onPause(); stopLobbyMusic() }
-    override fun onResume() { super.onResume(); if (currentScreen != "GAME" && !isMusicMuted) startLobbyMusic() }
-    override fun onDestroy() { super.onDestroy(); bgMusicPlayer?.release(); startSfxPlayer?.release(); supabase.stop() }
+    override fun onResume() {
+        super.onResume()
+        supabase.startLocationTracking()
+        if (currentScreen != "GAME" && !isMusicMuted) startLobbyMusic()
+    }
+    override fun onDestroy() {
+        super.onDestroy()
+        try { bgMusicPlayer?.release() } catch (_: Exception) {}
+        try { startSfxPlayer?.release() } catch (_: Exception) {}
+        supabase.stop()
+    }
 }
 
 class LudoGameView(
@@ -868,10 +677,8 @@ class LudoGameView(
         supabase.pushMatchTelemetry(summary, colorsCsv, pInfo)
     }
 
+    // আসল লুডুর নিয়ম: হোমে ঢুকতে ঠিক যত ঘর বাকি, শুধু সেই সংখ্যা উঠলেই হোমে ঢুকবে
     private fun rollRankedDice(player: PlayerColor): Int {
-        val myTokensAll = tokens.filter { it.owner == player }
-        // যদি হোম স্ট্রেচে কোনো গুটির ১-৫ ঘর বাকি থাকে, তবে সঠিক ঘর মেলানোর লজিক
-        val exactNeeded = myTokensAll.filter { it.steps in 51..56 }.map { 57 - it.steps }
         val order = supabase.rankOrder
         if (order.isEmpty()) return Random.nextInt(1, 7)
 
@@ -884,27 +691,27 @@ class LudoGameView(
         val myRankIdx = activeOrdered.indexOf(player.name)
         val myTokens = tokens.filter { it.owner == player }
         val finishedCount = myTokens.count { it.steps == 57 }
-        val mustWaitForHigherRank = (myRankIdx > 0 && finishedCount == 3)
 
         if (player.name == currentTopTarget) {
             val candidates = mutableListOf<Int>()
             for (d in 1..6) {
                 if (consecutiveSixes == 2 && d == 6) continue
-                var weight = 10
+                var weight = 12
                 for (t in myTokens) {
-                    if (t.steps == -1 && d == 6) weight += 42
+                    if (t.steps == -1 && d == 6) weight += 65
                     if (t.steps in 0..56) {
                         val nextStep = t.steps + d
-                        if (nextStep == 57) weight += 50
+                        if (nextStep > 57) continue
+                        if (nextStep == 57) weight += 120
                         if (nextStep in 0..50) {
                             val gIdx = (player.startOffset + nextStep) % 52
-                            if (gIdx in safeGlobalIndices) weight += 22
+                            if (gIdx in safeGlobalIndices) weight += 30
                             val canKill = tokens.any { opp ->
                                 opp.owner != player && opp.steps in 0..50 &&
                                         ((opp.owner.startOffset + opp.steps) % 52 == gIdx) &&
                                         gIdx !in safeGlobalIndices
                             }
-                            if (canKill) weight += 55
+                            if (canKill) weight += 85
                         }
                     }
                 }
@@ -921,7 +728,10 @@ class LudoGameView(
                     if (isBlocked && finishedCount >= 3 && t.steps in 0..56 && t.steps + d == 57) blocksWin = true
                     if (t.steps in 0..50 && t.steps + d <= 50) {
                         val gIdx = (player.startOffset + t.steps + d) % 52
-                        if (gIdx !in safeGlobalIndices && tokens.any { w -> w.owner.name == currentTopTarget && w.steps in 0..50 && ((w.owner.startOffset + w.steps) % 52 == gIdx) }) hitsTop = true
+                        if (gIdx !in safeGlobalIndices && tokens.any { w ->
+                                w.owner.name == currentTopTarget && w.steps in 0..50 &&
+                                        ((w.owner.startOffset + w.steps) % 52 == gIdx)
+                            }) hitsTop = true
                     }
                 }
                 if (!blocksWin && !hitsTop) safe.add(d)
@@ -1004,7 +814,6 @@ class LudoGameView(
         }
         paint.style = Paint.Style.FILL
 
-        // ইয়ার্ডগুলো গ্রিড লাইনের পরে আঁকা যাতে হোম বক্সের ভেতরে কোনো গ্রিড লাইন না থাকে
         drawYard(canvas, PlayerColor.RED, 0, 0)
         drawYard(canvas, PlayerColor.GREEN, 9, 0)
         drawYard(canvas, PlayerColor.YELLOW, 9, 9)
@@ -1059,7 +868,6 @@ class LudoGameView(
         val curr = activePlayers[currentPlayerIdx]
         drawCornerDiceBoxes(canvas, curr, boardSize)
 
-        // ১. মাঝখানে (Home Triangle) পৌঁছে যাওয়া গুটিগুলো নিজ নিজ রঙের ত্রিভুজে আঁকা
         val finishedTokens = tokens.filter { it.steps == 57 }
         for (p in activePlayers) {
             val pDone = finishedTokens.filter { it.owner == p }
@@ -1075,7 +883,6 @@ class LudoGameView(
             }
         }
 
-        // ২. বোর্ডের চলমান গুটিগুলো আঁকা
         val activeTokens = tokens.filter { it.steps < 57 }.sortedBy { if (it.owner == curr) 1 else 0 }
         val grouped = activeTokens.groupBy { getTokenGridPos(it) }
         for ((pos, group) in grouped) {
@@ -1110,7 +917,7 @@ class LudoGameView(
             paint.color = Color.parseColor("#FFD700")
             paint.textSize = 62f
             paint.textAlign = Paint.Align.CENTER
-            canvas.drawText("🏆 MATCH RESULTS 🏆", width / 2f, height * 0.34f, paint)
+            canvas.drawText("MATCH RESULTS", width / 2f, height * 0.34f, paint)
 
             val remaining = activePlayers.filter { it !in finishedRankings }
             val fullOrder = finishedRankings + remaining
@@ -1124,7 +931,6 @@ class LudoGameView(
         }
     }
 
-    // জুম করা ছবি (1000104953.png) অনুযায়ী হুবহু সিলভার ম্যাপ-পিন গুটি
     private fun drawLudoKingExactPin(canvas: Canvas, px: Float, py: Float, p: PlayerColor, scale: Float, highlight: Boolean) {
         val u = cellSize * 0.45f * scale
 
@@ -1270,7 +1076,6 @@ class LudoGameView(
         }
     }
 
-    // 1000104954.png অনুযায়ী হোম ইয়ার্ডে রঙিন বৃত্ত ও ভেতরে মেরুন রিং
     private fun drawYard(canvas: Canvas, p: PlayerColor, gx: Int, gy: Int) {
         paint.color = p.colorHex
         canvas.drawRect(
@@ -1409,6 +1214,7 @@ class LudoGameView(
     }
 
     private fun animateTokenMove(t: Token) {
+        if (!canMove(t, diceValue)) return
         isAnimating = true
         val stepsToMove = if (t.steps == -1) 1 else diceValue
         var moved = 0
@@ -1476,7 +1282,7 @@ class LudoGameView(
         } else if (t.steps in 0..50) {
             val gIdx = (t.owner.startOffset + t.steps) % 52
             if (gIdx in safeGlobalIndices) {
-                SoundEngine.playHomeOrSix()
+                SoundEngine.playSafeZone()
                 syncProgressToRemote()
                 nextTurn(extraTurn)
                 invalidate()
@@ -1516,7 +1322,9 @@ class LudoGameView(
 
         if (vsComputer && currentPlayerIdx > 0 && !isDiceRolled) {
             handler.postDelayed({
-                if (!isDiceRolled && !isAnimating) animateAndRollDice(activePlayers[currentPlayerIdx])
+                if (!isDiceRolled && !isAnimating && finishedRankings.size < activePlayers.size - 1) {
+                    animateAndRollDice(activePlayers[currentPlayerIdx])
+                }
             }, 600)
         }
     }
