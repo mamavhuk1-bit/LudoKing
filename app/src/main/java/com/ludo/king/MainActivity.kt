@@ -653,10 +653,10 @@ class LudoGameView(
     private val safeGlobalIndices = setOf(0, 8, 13, 21, 26, 34, 39, 47)
 
     private val homeStretches = mapOf(
-        PlayerColor.RED to listOf(1 to 7, 2 to 7, 3 to 7, 4 to 7, 5 to 7, 6 to 7),
-        PlayerColor.GREEN to listOf(7 to 1, 7 to 2, 7 to 3, 7 to 4, 7 to 5, 7 to 6),
-        PlayerColor.YELLOW to listOf(13 to 7, 12 to 7, 11 to 7, 10 to 7, 9 to 7, 8 to 7),
-        PlayerColor.BLUE to listOf(7 to 13, 7 to 12, 7 to 11, 7 to 10, 7 to 9, 7 to 8)
+        PlayerColor.RED to listOf(1 to 7, 2 to 7, 3 to 7, 4 to 7, 5 to 7),
+        PlayerColor.GREEN to listOf(7 to 1, 7 to 2, 7 to 3, 7 to 4, 7 to 5),
+        PlayerColor.YELLOW to listOf(13 to 7, 12 to 7, 11 to 7, 10 to 7, 9 to 7),
+        PlayerColor.BLUE to listOf(7 to 13, 7 to 12, 7 to 11, 7 to 10, 7 to 9)
     )
 
     private val yardCoords = mapOf(
@@ -670,8 +670,8 @@ class LudoGameView(
         val summary = activePlayers.joinToString(" | ") { p ->
             val pTokens = tokens.filter { it.owner == p }
             val totalSteps = pTokens.sumOf { if (it.steps < 0) 0 else it.steps }
-            val pct = ((totalSteps / 228.0) * 100).toInt().coerceIn(0, 100)
-            val homeCount = pTokens.count { it.steps == 57 }
+            val pct = ((totalSteps / 224.0) * 100).toInt().coerceIn(0, 100)
+            val homeCount = pTokens.count { it.steps == 56 }
             "${p.name}:$pct%(H:$homeCount)"
         }
         val colorsCsv = activePlayers.joinToString(",") { it.name }
@@ -692,11 +692,11 @@ class LudoGameView(
         val currentTopTarget = activeOrdered.first()
         val myRankIdx = activeOrdered.indexOf(player.name)
         val myTokens = tokens.filter { it.owner == player }
-        val finishedCount = myTokens.count { it.steps == 57 }
+        val finishedCount = myTokens.count { it.steps == 56 }
 
         if (player.name == currentTopTarget) {
             // যদি টার্গেট প্লেয়ারের কোনো গুটি হোমে ঢোকার জন্য ১-৬ ঘরের দূরত্বে থাকে, তবে সরাসরি সেই exact সংখ্যাটিই দেবে!
-            val directFinishDice = myTokens.filter { it.steps in 51..56 }.map { 57 - it.steps }.firstOrNull { d -> !(consecutiveSixes == 2 && d == 6) }
+            val directFinishDice = myTokens.filter { it.steps in 51..55 }.map { 56 - it.steps }.firstOrNull { d -> !(consecutiveSixes == 2 && d == 6) }
             if (directFinishDice != null) return directFinishDice
 
             val candidates = mutableListOf<Int>()
@@ -705,9 +705,9 @@ class LudoGameView(
                 var weight = 4
                 for (t in myTokens) {
                     if (t.steps == -1 && d == 6) weight += 80
-                    if (t.steps in 0..56) {
+                    if (t.steps in 0..55) {
                         val nextStep = t.steps + d
-                        if (nextStep > 57) continue
+                        if (nextStep > 56) continue
                         if (nextStep == 57) weight += 250
                         if (nextStep in 51..56) weight += 60
                         if (nextStep in 0..50) {
@@ -732,7 +732,7 @@ class LudoGameView(
                 var blocksWin = false
                 var hitsTop = false
                 for (t in myTokens) {
-                    if (isBlocked && finishedCount >= 3 && t.steps in 0..56 && t.steps + d == 57) blocksWin = true
+                    if (isBlocked && finishedCount >= 3 && t.steps in 0..55 && t.steps + d == 57) blocksWin = true
                     if (t.steps in 0..50 && t.steps + d <= 50) {
                         val gIdx = (player.startOffset + t.steps + d) % 52
                         if (gIdx !in safeGlobalIndices && tokens.any { w ->
@@ -754,7 +754,7 @@ class LudoGameView(
                 val c = mainTrack[(t.owner.startOffset + t.steps) % 52]
                 (c.first + 0.5f) to (c.second + 0.5f)
             }
-            t.steps in 51..56 -> {
+            t.steps in 51..55 -> {
                 val c = homeStretches[t.owner]!![t.steps - 51]
                 (c.first + 0.5f) to (c.second + 0.5f)
             }
@@ -875,7 +875,7 @@ class LudoGameView(
         val curr = activePlayers[currentPlayerIdx]
         drawCornerDiceBoxes(canvas, curr, boardSize)
 
-        val finishedTokens = tokens.filter { it.steps == 57 }
+        val finishedTokens = tokens.filter { it.steps == 56 }
         for (p in activePlayers) {
             val pDone = finishedTokens.filter { it.owner == p }
             pDone.forEachIndexed { idx, _ ->
@@ -890,7 +890,7 @@ class LudoGameView(
             }
         }
 
-        val activeTokens = tokens.filter { it.steps < 57 }.sortedBy { if (it.owner == curr) 1 else 0 }
+        val activeTokens = tokens.filter { it.steps < 56 }.sortedBy { if (it.owner == curr) 1 else 0 }
         val grouped = activeTokens.groupBy { getTokenGridPos(it) }
         for ((pos, group) in grouped) {
             val count = group.size
@@ -1228,7 +1228,7 @@ class LudoGameView(
 
         fun stepOnce() {
             if (moved < stepsToMove) {
-                if (t.steps == -1) t.steps = 0 else if (t.steps < 57) t.steps += 1
+                if (t.steps == -1) t.steps = 0 else if (t.steps < 56) t.steps += 1
                 moved++
                 t.hopScale = 1.38f
                 SoundEngine.playStep()
@@ -1247,8 +1247,8 @@ class LudoGameView(
 
     private fun canMove(t: Token, dice: Int): Boolean {
         if (t.steps < 0) return dice == 6
-        if (t.steps >= 57) return false
-        return (t.steps + dice) <= 57
+        if (t.steps >= 56) return false
+        return (t.steps + dice) <= 56
     }
 
     private fun animateCapturedTokenReturn(victim: Token, onComplete: () -> Unit) {
@@ -1275,10 +1275,10 @@ class LudoGameView(
     private fun finalizeMove(t: Token) {
         var extraTurn = (diceValue == 6)
 
-        if (t.steps == 57) {
+        if (t.steps == 56) {
             extraTurn = true
             SoundEngine.playTokenHomeFanfare()
-            if (tokens.count { it.owner == t.owner && it.steps == 57 } == 4 && t.owner !in finishedRankings) {
+            if (tokens.count { it.owner == t.owner && it.steps == 56 } == 4 && t.owner !in finishedRankings) {
                 finishedRankings.add(t.owner)
                 SoundEngine.playWinFanfare()
                 extraTurn = false
