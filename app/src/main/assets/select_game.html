@@ -7,7 +7,7 @@
   * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-tap-highlight-color: transparent; }
   html, body {
     width: 100%; height: 100%; overflow: hidden;
-    background: radial-gradient(circle at center, rgba(13,38,94,0.86) 0%, rgba(5,14,38,0.96) 100%);
+    background: radial-gradient(circle at center, rgba(13,38,94,0.88) 0%, rgba(5,14,38,0.97) 100%);
     font-family: 'Segoe UI', Roboto, sans-serif;
     display: flex; flex-direction: column; justify-content: center; align-items: center;
     padding: 16px;
@@ -25,7 +25,6 @@
     display: flex; align-items: center; justify-content: center;
   }
   .theme-text { color: #fff; font-weight: 800; font-size: 13px; letter-spacing: 0.5px; }
-
   .royal-panel {
     width: 100%; max-width: 420px;
     background: linear-gradient(180deg, #0d47a1 0%, #072563 100%);
@@ -65,24 +64,16 @@
     transform: rotate(-45deg); background: linear-gradient(135deg, #fff, #cbd5e1);
     border: 2px solid #334155; display: flex; align-items: center; justify-content: center;
   }
-  .tok-pin::after {
-    content: ''; width: 12px; height: 12px; border-radius: 50%; background: #1882e8;
-  }
+  .tok-pin::after { content: ''; width: 12px; height: 12px; border-radius: 50%; background: #1882e8; }
   .tok-disc {
     width: 30px; height: 30px; border-radius: 50%;
     background: radial-gradient(circle at 30% 30%, #93c5fd, #1d4ed8);
     border: 2.5px solid #e2e8f0; color: #fff; font-size: 14px;
     display: flex; align-items: center; justify-content: center;
   }
-  .lock {
-    position: absolute; top: -3px; left: -3px; font-size: 12px;
-  }
-
+  .lock { position: absolute; top: -3px; left: -3px; font-size: 12px; }
   .mode-list { display: flex; flex-direction: column; gap: 14px; margin: 12px 0 20px; }
-  .mode-row {
-    display: flex; align-items: center; justify-content: center; gap: 16px;
-    cursor: pointer;
-  }
+  .mode-row { display: flex; align-items: center; justify-content: center; gap: 16px; cursor: pointer; }
   .mode-icon-box {
     width: 64px; height: 64px; border-radius: 14px;
     background: linear-gradient(180deg, #1d4ed8, #172554);
@@ -98,9 +89,7 @@
     display: flex; align-items: center; padding-left: 58px; padding-right: 12px;
     box-shadow: 0 5px 12px rgba(0,0,0,0.45);
   }
-  .mode-pill.quick {
-    background: linear-gradient(180deg, #22c55e, #15803d);
-  }
+  .mode-pill.quick { background: linear-gradient(180deg, #22c55e, #15803d); }
   .radio-circle {
     position: absolute; left: -4px; top: 50%; transform: translateY(-50%);
     width: 56px; height: 56px; border-radius: 50%;
@@ -116,13 +105,11 @@
     text-shadow: 0 2px 3px rgba(0,0,0,0.4);
   }
   .mode-row.selected .check-badge { display: flex; }
-
   .mode-label {
     color: #fff; font-weight: 800; font-size: 17px; width: 100%; text-align: center;
     text-shadow: 0 2px 3px rgba(0,0,0,0.6); line-height: 1.1;
   }
   .mode-sub { font-size: 11px; color: #bae6fd; display: block; font-weight: 700; }
-
   .next-btn {
     display: block; margin: 0 auto;
     width: 175px; height: 50px; border-radius: 26px;
@@ -132,7 +119,6 @@
     box-shadow: 0 6px 16px rgba(0,0,0,0.55);
   }
   .next-btn:active { transform: scale(0.95); }
-
   .back-btn {
     position: fixed; left: 18px; bottom: 20px;
     width: 52px; height: 52px; border-radius: 50%;
@@ -145,12 +131,10 @@
 </style>
 </head>
 <body>
-
-<div class="theme-pill" id="headerPill">
+<div class="theme-pill">
   <div class="theme-check">✓</div>
-  <div class="theme-text" id="themeTitle">SELECT THEME</div>
+  <div class="theme-text">SELECT THEME</div>
 </div>
-
 <div class="royal-panel">
   <div class="sec-title">SELECT TOKEN</div>
   <div class="token-strip">
@@ -162,9 +146,7 @@
     <div class="tok"><span class="lock">🔒</span><div class="tok-disc" style="background:#64748b">🐻</div></div>
     <div class="arrow">▶</div>
   </div>
-
   <div class="sec-title">SELECT GAME <span class="help-btn" onclick="SelectBridge.onHelp()">?</span></div>
-
   <div class="mode-list">
     <div class="mode-row selected" id="row-0" onclick="pickMode(0)">
       <div class="mode-icon-box">👤<br>VS<br>👤</div>
@@ -173,7 +155,6 @@
         <div class="mode-label">Classic</div>
       </div>
     </div>
-
     <div class="mode-row" id="row-1" onclick="pickMode(1)">
       <div class="mode-icon-box">👥<br>VS<br>👥</div>
       <div class="mode-pill">
@@ -181,7 +162,6 @@
         <div class="mode-label"><span class="mode-sub">Classic</span>Team Up</div>
       </div>
     </div>
-
     <div class="mode-row" id="row-2" onclick="pickMode(2)">
       <div class="mode-icon-box">👤↻👤<br>VS<br>👤</div>
       <div class="mode-pill quick">
@@ -190,19 +170,11 @@
       </div>
     </div>
   </div>
-
-  <button class="next-btn" onclick="goNext()">Next</button>
+  <button class="next-btn" onclick="SelectBridge.onNext(selectedMode)">Next</button>
 </div>
-
 <button class="back-btn" onclick="SelectBridge.onBack()">↩</button>
-
 <script>
 let selectedMode = 0;
-function setGameType(isSnakes) {
-  if (isSnakes) {
-    document.getElementById('themeTitle').textContent = '🐍 SNAKES & LADDERS';
-  }
-}
 function selectTok(el) {
   document.querySelectorAll('.tok').forEach(t => t.classList.remove('active'));
   el.classList.add('active');
@@ -212,9 +184,6 @@ function pickMode(m) {
   selectedMode = m;
   [0,1,2].forEach(i => document.getElementById('row-' + i).classList.toggle('selected', i === m));
   SelectBridge.onTick();
-}
-function goNext() {
-  SelectBridge.onNext(selectedMode);
 }
 </script>
 </body>

@@ -457,7 +457,8 @@ class MainActivity : AppCompatActivity() {
             }
         }
         webView.addJavascriptInterface(bridge, "SelectBridge")
-        webView.loadUrl("file:///android_asset/select_game.html")
+        val html1 = assets.open("select_game.html").bufferedReader().use { it.readText() }
+        webView.loadDataWithBaseURL("file:///android_asset/", html1, "text/html", "UTF-8", null)
         frame.addView(webView, FrameLayout.LayoutParams(-1, -1))
 
         frame.addView(makeMuteButton(), FrameLayout.LayoutParams(110, 110).apply {
@@ -504,7 +505,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         webView.addJavascriptInterface(bridge, "PlayerBridge")
-        webView.loadUrl("file:///android_asset/choose_players.html")
+        val html2 = assets.open("choose_players.html").bufferedReader().use { it.readText() }
+        webView.loadDataWithBaseURL("file:///android_asset/", html2, "text/html", "UTF-8", null)
         rootContainer.addView(webView, FrameLayout.LayoutParams(-1, -1))
     }
 
