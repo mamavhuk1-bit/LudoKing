@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden;
+    background: radial-gradient(circle at center, rgba(13,38,94,0.86) 0%, rgba(5,14,38,0.96) 100%);
+    font-family: 'Segoe UI', Roboto, sans-serif;
+    display: flex; flex-direction: column; justify-content: center; align-items: center;
+    padding: 16px;
+  }
+  .theme-pill {
+    display: flex; align-items: center; gap: 10px;
+    background: linear-gradient(180deg, #1d4ed8, #1e3a8a);
+    border: 2.5px solid #facc15; border-radius: 30px;
+    padding: 6px 18px 6px 10px; margin-bottom: 12px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+  }
+  .theme-check {
+    width: 24px; height: 24px; border-radius: 50%; border: 2px solid #facc15;
+    color: #facc15; font-size: 14px; font-weight: bold;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .theme-text { color: #fff; font-weight: 800; font-size: 13px; letter-spacing: 0.5px; }
+
+  .royal-panel {
+    width: 100%; max-width: 420px;
+    background: linear-gradient(180deg, #0d47a1 0%, #072563 100%);
+    border-top: 3px solid #facc15; border-bottom: 3px solid #facc15;
+    border-radius: 18px; padding: 14px 16px 20px;
+    box-shadow: 0 12px 35px rgba(0,0,0,0.65);
+  }
+  .sec-title {
+    text-align: center; color: #facc15; font-size: 16px; font-weight: 900;
+    letter-spacing: 0.8px; text-shadow: 0 2px 4px rgba(0,0,0,0.7);
+    margin-bottom: 10px; position: relative;
+  }
+  .help-btn {
+    position: absolute; right: 6px; top: -2px;
+    width: 24px; height: 24px; border-radius: 50%;
+    border: 2px solid #facc15; background: #1e3a8a; color: #facc15;
+    font-size: 13px; font-weight: bold; display: flex; align-items: center; justify-content: center;
+  }
+  .token-strip {
+    display: flex; align-items: center; justify-content: space-between;
+    background: linear-gradient(180deg, #092256, #0d3685);
+    border-top: 2px solid #38bdf8; border-bottom: 2px solid #38bdf8;
+    padding: 10px 8px; margin: 0 -16px 14px;
+  }
+  .arrow { color: #facc15; font-size: 18px; padding: 0 6px; }
+  .tok {
+    width: 44px; height: 44px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    position: relative; transition: transform 0.15s;
+  }
+  .tok.active {
+    background: radial-gradient(circle, rgba(250,204,21,0.35), transparent);
+    border: 2px solid #facc15; transform: scale(1.1);
+  }
+  .tok-pin {
+    width: 26px; height: 26px; border-radius: 50% 50% 50% 0;
+    transform: rotate(-45deg); background: linear-gradient(135deg, #fff, #cbd5e1);
+    border: 2px solid #334155; display: flex; align-items: center; justify-content: center;
+  }
+  .tok-pin::after {
+    content: ''; width: 12px; height: 12px; border-radius: 50%; background: #1882e8;
+  }
+  .tok-disc {
+    width: 30px; height: 30px; border-radius: 50%;
+    background: radial-gradient(circle at 30% 30%, #93c5fd, #1d4ed8);
+    border: 2.5px solid #e2e8f0; color: #fff; font-size: 14px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .lock {
+    position: absolute; top: -3px; left: -3px; font-size: 12px;
+  }
+
+  .mode-list { display: flex; flex-direction: column; gap: 14px; margin: 12px 0 20px; }
+  .mode-row {
+    display: flex; align-items: center; justify-content: center; gap: 16px;
+    cursor: pointer;
+  }
+  .mode-icon-box {
+    width: 64px; height: 64px; border-radius: 14px;
+    background: linear-gradient(180deg, #1d4ed8, #172554);
+    border: 2.5px solid #facc15;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-weight: 900; font-size: 13px; text-align: center;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.4);
+  }
+  .mode-pill {
+    position: relative; width: 195px; height: 54px;
+    border-radius: 28px; border: 2.5px solid #facc15;
+    background: linear-gradient(180deg, #1e40af, #172554);
+    display: flex; align-items: center; padding-left: 58px; padding-right: 12px;
+    box-shadow: 0 5px 12px rgba(0,0,0,0.45);
+  }
+  .mode-pill.quick {
+    background: linear-gradient(180deg, #22c55e, #15803d);
+  }
+  .radio-circle {
+    position: absolute; left: -4px; top: 50%; transform: translateY(-50%);
+    width: 56px; height: 56px; border-radius: 50%;
+    background: #172554; border: 3px solid #facc15;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 3px 8px rgba(0,0,0,0.5);
+  }
+  .check-badge {
+    width: 44px; height: 44px; border-radius: 50%;
+    background: linear-gradient(180deg, #22c55e, #16a34a);
+    color: #fff; font-size: 24px; font-weight: 900;
+    display: none; align-items: center; justify-content: center;
+    text-shadow: 0 2px 3px rgba(0,0,0,0.4);
+  }
+  .mode-row.selected .check-badge { display: flex; }
+
+  .mode-label {
+    color: #fff; font-weight: 800; font-size: 17px; width: 100%; text-align: center;
+    text-shadow: 0 2px 3px rgba(0,0,0,0.6); line-height: 1.1;
+  }
+  .mode-sub { font-size: 11px; color: #bae6fd; display: block; font-weight: 700; }
+
+  .next-btn {
+    display: block; margin: 0 auto;
+    width: 175px; height: 50px; border-radius: 26px;
+    background: linear-gradient(180deg, #2563eb, #1d4ed8);
+    border: 3px solid #facc15; color: #fff;
+    font-size: 20px; font-weight: 900; letter-spacing: 0.5px;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.55);
+  }
+  .next-btn:active { transform: scale(0.95); }
+
+  .back-btn {
+    position: fixed; left: 18px; bottom: 20px;
+    width: 52px; height: 52px; border-radius: 50%;
+    background: linear-gradient(180deg, #1d4ed8, #1e3a8a);
+    border: 3px solid #facc15; color: #facc15;
+    font-size: 24px; font-weight: bold;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  }
+</style>
+</head>
+<body>
+
+<div class="theme-pill" id="headerPill">
+  <div class="theme-check">✓</div>
+  <div class="theme-text" id="themeTitle">SELECT THEME</div>
+</div>
+
+<div class="royal-panel">
+  <div class="sec-title">SELECT TOKEN</div>
+  <div class="token-strip">
+    <div class="arrow">◀</div>
+    <div class="tok active" onclick="selectTok(this)"><div class="tok-pin"></div></div>
+    <div class="tok" onclick="selectTok(this)"><div class="tok-disc">★</div></div>
+    <div class="tok"><span class="lock">🔒</span><div class="tok-disc" style="background:#0284c7">⚡</div></div>
+    <div class="tok"><span class="lock">🔒</span><div class="tok-disc" style="background:#38bdf8">🌪</div></div>
+    <div class="tok"><span class="lock">🔒</span><div class="tok-disc" style="background:#64748b">🐻</div></div>
+    <div class="arrow">▶</div>
+  </div>
+
+  <div class="sec-title">SELECT GAME <span class="help-btn" onclick="SelectBridge.onHelp()">?</span></div>
+
+  <div class="mode-list">
+    <div class="mode-row selected" id="row-0" onclick="pickMode(0)">
+      <div class="mode-icon-box">👤<br>VS<br>👤</div>
+      <div class="mode-pill">
+        <div class="radio-circle"><div class="check-badge">✔</div></div>
+        <div class="mode-label">Classic</div>
+      </div>
+    </div>
+
+    <div class="mode-row" id="row-1" onclick="pickMode(1)">
+      <div class="mode-icon-box">👥<br>VS<br>👥</div>
+      <div class="mode-pill">
+        <div class="radio-circle"><div class="check-badge">✔</div></div>
+        <div class="mode-label"><span class="mode-sub">Classic</span>Team Up</div>
+      </div>
+    </div>
+
+    <div class="mode-row" id="row-2" onclick="pickMode(2)">
+      <div class="mode-icon-box">👤↻👤<br>VS<br>👤</div>
+      <div class="mode-pill quick">
+        <div class="radio-circle"><div class="check-badge">✔</div></div>
+        <div class="mode-label">QUICK</div>
+      </div>
+    </div>
+  </div>
+
+  <button class="next-btn" onclick="goNext()">Next</button>
+</div>
+
+<button class="back-btn" onclick="SelectBridge.onBack()">↩</button>
+
+<script>
+let selectedMode = 0;
+function setGameType(isSnakes) {
+  if (isSnakes) {
+    document.getElementById('themeTitle').textContent = '🐍 SNAKES & LADDERS';
+  }
+}
+function selectTok(el) {
+  document.querySelectorAll('.tok').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  SelectBridge.onTick();
+}
+function pickMode(m) {
+  selectedMode = m;
+  [0,1,2].forEach(i => document.getElementById('row-' + i).classList.toggle('selected', i === m));
+  SelectBridge.onTick();
+}
+function goNext() {
+  SelectBridge.onNext(selectedMode);
+}
+</script>
+</body>
+</html>

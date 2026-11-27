@@ -16,6 +16,9 @@ import android.os.Handler
 import android.os.Looper
 import android.view.*
 import android.view.animation.OvershootInterpolator
+import android.webkit.JavascriptInterface
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import android.widget.*
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
@@ -46,6 +49,7 @@ class MainActivity : AppCompatActivity() {
 
     private var currentScreen = "SPLASH"
     private var vsComputer = false
+    private var isSnakesMode = false
     private var bgMusicPlayer: MediaPlayer? = null
     private var startSfxPlayer: MediaPlayer? = null
     private var isMusicMuted = false
@@ -348,10 +352,13 @@ class MainActivity : AppCompatActivity() {
                 val ny = ev.y / v.height
                 when {
                     nx in 0.19f..0.48f && ny in 0.53f..0.65f -> {
-                        SoundEngine.playStep(); vsComputer = true; showAfterPassScreen()
+                        SoundEngine.playStep(); isSnakesMode = false; vsComputer = true; showAfterPassScreen()
                     }
                     nx in 0.52f..0.81f && ny in 0.53f..0.65f -> {
-                        SoundEngine.playStep(); vsComputer = false; showAfterPassScreen()
+                        SoundEngine.playStep(); isSnakesMode = false; vsComputer = false; showAfterPassScreen()
+                    }
+                    nx in 0.72f..0.95f && ny in 0.65f..0.78f -> {
+                        SoundEngine.playStep(); isSnakesMode = true; vsComputer = false; showAfterPassScreen()
                     }
                     else -> showServerError()
                 }
@@ -364,54 +371,60 @@ class MainActivity : AppCompatActivity() {
     private fun showAfterPassScreen() {
         currentScreen = "AFTER_PASS"
         rootContainer.removeAllViews()
-        val frame = FrameLayout(this)
+
+        val frame = FrameLayout(this).apply { setBackgroundColor(Color.parseColor("#081636")) }
         val bg = ImageView(this).apply {
-            setImageResource(R.drawable.screen_afterpass)
+            setImageResource(R.drawable.screen_home)
             scaleType = ImageView.ScaleType.FIT_XY
+            alpha = 0.25f
         }
         frame.addView(bg, FrameLayout.LayoutParams(-1, -1))
 
-        var selectedMode = 0
-        val modeIndicator = object : View(this) {
-            val p = Paint(Paint.ANTI_ALIAS_FLAG)
-            override fun onDraw(canvas: Canvas) {
-                val centersY = listOf(0.495f, 0.605f, 0.705f)
-                centersY.forEachIndexed { idx, cy ->
-                    val cx = width * 0.502f
-                    val y = height * cy
-                    p.color = if (idx == selectedMode) Color.parseColor("#1B5E20") else Color.parseColor("#0D2B6B")
-                    canvas.drawCircle(cx, y, width * 0.042f, p)
-                    if (idx == selectedMode) {
-                        p.color = Color.parseColor("#FFCA28")
-                        p.textSize = width * 0.055f
-                        p.textAlign = Paint.Align.CENTER
-                        p.typeface = Typeface.DEFAULT_BOLD
-                        canvas.drawText("✔", cx, y + width * 0.02f, p)
-                    }
+        val webView = WebView(this).apply {
+            settings.javaScriptEnabled = true
+            setBackgroundColor(Color.TRANSPARENT)
+        }
+        val bridge = object {
+            @JavascriptInterface
+            fun onTick() { SoundEngine.playStep() }
+
+            @JavascriptInterface
+            fun onNext(mode: Int) {
+                runOnUiThread {
+                    SoundEngine.playStep()
+                    showAfterNextScreen()
+                }
+            }
+
+            @JavascriptInterface
+            fun onBack() {
+                runOnUiThread {
+                    SoundEngine.playStep()
+                    showHomeScreen()
+                }
+            }
+
+            @JavascriptInterface
+            fun onHelp() {
+                runOnUiThread {
+                    Toast.makeText(this@MainActivity, if (isSnakesMode) "Snakes & Ladders Mode" else "Select Classic, Team Up or Quick", Toast.LENGTH_SHORT).show()
                 }
             }
         }
-        frame.addView(modeIndicator, FrameLayout.LayoutParams(-1, -1))
+        webView.addJavascriptInterface(bridge, "SelectBridge")
+        webView.webViewClient = object : WebViewClient() {
+            override fun onPageFinished(view: WebView?, url: String?) {
+                webView.evaluateJavascript("setGameType($isSnakesMode)", null)
+            }
+        }
+        webView.loadUrl("file:///android_asset/select_game.html")
+        frame.addView(webView, FrameLayout.LayoutParams(-1, -1))
 
         frame.addView(makeMuteButton(), FrameLayout.LayoutParams(110, 110).apply {
             gravity = Gravity.TOP or Gravity.END
-            topMargin = 110; rightMargin = 24
+            topMargin = 42; rightMargin = 24
         })
 
-        frame.setOnTouchListener { v, ev ->
-            if (ev.action == MotionEvent.ACTION_DOWN) {
-                val nx = ev.x / v.width
-                val ny = ev.y / v.height
-                when {
-                    ny in 0.45f..0.54f -> { selectedMode = 0; SoundEngine.playStep(); modeIndicator.invalidate() }
-                    ny in 0.56f..0.65f -> { selectedMode = 1; SoundEngine.playStep(); modeIndicator.invalidate() }
-                    ny in 0.66f..0.74f -> { selectedMode = 2; SoundEngine.playStep(); modeIndicator.invalidate() }
-                    nx in 0.30f..0.70f && ny in 0.74f..0.83f -> { SoundEngine.playStep(); showAfterNextScreen() }
-                    nx in 0.02f..0.18f && ny in 0.88f..0.97f -> { SoundEngine.playStep(); showHomeScreen() }
-                }
-            }
-            true
-        }
         rootContainer.addView(frame, FrameLayout.LayoutParams(-1, -1))
     }
 
@@ -715,9 +728,16 @@ class MainActivity : AppCompatActivity() {
             3 -> listOf(PlayerColor.BLUE, PlayerColor.RED, PlayerColor.GREEN)
             else -> listOf(PlayerColor.BLUE, PlayerColor.RED, PlayerColor.GREEN, PlayerColor.YELLOW)
         }
-        val gameView = LudoGameView(this, activeColors, names, oneTokenOut, vsComputer, supabase) {
-            startLobbyMusic()
-            showHomeScreen()
+        val gameView: View = if (isSnakesMode) {
+            SnakesAndLaddersView(this, activeColors, names, vsComputer, supabase) {
+                startLobbyMusic()
+                showHomeScreen()
+            }
+        } else {
+            LudoGameView(this, activeColors, names, oneTokenOut, vsComputer, supabase) {
+                startLobbyMusic()
+                showHomeScreen()
+            }
         }
         rootContainer.addView(gameView, FrameLayout.LayoutParams(-1, -1))
 
