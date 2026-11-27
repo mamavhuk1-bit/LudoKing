@@ -369,47 +369,6 @@ class MainActivity : AppCompatActivity() {
         rootContainer.addView(frame, FrameLayout.LayoutParams(-1, -1))
     }
 
-    private fun showServerError() {
-        currentScreen = "SNAKES_WIZARD"
-        rootContainer.removeAllViews()
-        val webView = WebView(this).apply {
-            settings.javaScriptEnabled = true
-            setBackgroundColor(Color.parseColor("#450A0A"))
-        }
-        val bridge = object {
-            @JavascriptInterface
-            fun onTick() { SoundEngine.playStep() }
-
-            @JavascriptInterface
-            fun onServerError() { runOnUiThread { showServerError() } }
-
-            @JavascriptInterface
-            fun onBackLudo() { runOnUiThread { showHomeScreen() } }
-
-            @JavascriptInterface
-            fun onStartSnakeGame(boardIdx: Int, pCount: Int, namesJson: String, isComp: Boolean) {
-                runOnUiThread {
-                    val arr = JSONArray(namesJson)
-                    val pNames = (0 until arr.length()).map { arr.getString(it) }
-                    val palette = listOf(PlayerColor.BLUE, PlayerColor.RED, PlayerColor.GREEN, PlayerColor.YELLOW, PlayerColor.BLUE, PlayerColor.RED)
-                    val pCols = palette.take(pCount)
-                    currentScreen = "GAME"
-                    stopLobbyMusic()
-                    playGameStartSound()
-                    rootContainer.removeAllViews()
-                    val sView = SnakesAndLaddersView(this@MainActivity, boardIdx, pCols, pNames, isComp, supabase) {
-                        startLobbyMusic()
-                        showHomeScreen()
-                    }
-                    rootContainer.addView(sView, FrameLayout.LayoutParams(-1, -1))
-                }
-            }
-        }
-        webView.addJavascriptInterface(bridge, "SnakeBridge")
-        webView.loadUrl("file:///android_asset/snakes_wizard.html")
-        rootContainer.addView(webView, FrameLayout.LayoutParams(-1, -1))
-    }
-
     private fun showAfterPassScreen() {
         currentScreen = "AFTER_PASS"
         rootContainer.removeAllViews()
@@ -771,7 +730,7 @@ class MainActivity : AppCompatActivity() {
             else -> listOf(PlayerColor.BLUE, PlayerColor.RED, PlayerColor.GREEN, PlayerColor.YELLOW)
         }
         val gameView: View = if (isSnakesMode) {
-            SnakesAndLaddersView(this, 0, activeColors, names, vsComputer, supabase) {
+            LudoGameView(this, 0, activeColors, names, vsComputer, supabase) {
                 startLobbyMusic()
                 showHomeScreen()
             }
