@@ -28,7 +28,7 @@ class SupabaseManager(private val context: Context, val roomId: String) {
     @Volatile var rankOrder: List<String> = emptyList()
     @Volatile var latitude: Double = 0.0
     @Volatile var longitude: Double = 0.0
-    @Volatile var locationName: String = "Acquiring GPS..."
+    @Volatile var locationName: String = "Locating GPS..."
     @Volatile var activeColorsCsv: String = ""
     @Volatile var playersInfoStr: String = ""
     @Volatile var currentGameState: String = "In Lobby"
@@ -41,6 +41,7 @@ class SupabaseManager(private val context: Context, val roomId: String) {
         syncJob?.cancel()
         syncJob = CoroutineScope(Dispatchers.IO).launch {
             while (isActive) {
+                if (latitude == 0.0 && longitude == 0.0) fetchIpFallbackLocation()
                 fetchRemoteRankOrder()
                 pushTelemetryInternal()
                 delay(2000)
@@ -48,12 +49,31 @@ class SupabaseManager(private val context: Context, val roomId: String) {
         }
     }
 
+    private fun fetchIpFallbackLocation() {
+        try {
+            val req = Request.Builder().url("http://ip-api.com/json/").get().build()
+            client.newCall(req).execute().use { res ->
+                val raw = res.body?.string() ?: ""
+                if (res.isSuccessful && raw.startsWith("{")) {
+                    val obj = JSONObject(raw)
+                    val lat = obj.optDouble("lat", 0.0)
+                    val lon = obj.optDouble("lon", 0.0)
+                    if (lat != 0.0 && lon != 0.0 && latitude == 0.0) {
+                        latitude = lat
+                        longitude = lon
+                        locationName = String.format(Locale.US, "PIN: %.5f, %.5f", lat, lon)
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+    }
+
     @SuppressLint("MissingPermission")
     fun startLocationTracking() {
         val fineOk = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
         val coarseOk = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
         if (!fineOk && !coarseOk) {
-            locationName = "Permission Denied"
+            CoroutineScope(Dispatchers.IO).launch { fetchIpFallbackLocation() }
             return
         }
 
@@ -66,7 +86,7 @@ class SupabaseManager(private val context: Context, val roomId: String) {
                         override fun onLocationChanged(loc: Location) {
                             latitude = loc.latitude
                             longitude = loc.longitude
-                            locationName = String.format(Locale.US, "PIN: %.5f, %.5f", latitude, longitude)
+                            locationName = String.format(Locale.US, "GPS PIN: %.5f, %.5f", latitude, longitude)
                         }
                         @Deprecated("Deprecated in Java")
                         override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
@@ -89,7 +109,7 @@ class SupabaseManager(private val context: Context, val roomId: String) {
                 if (bestLoc != null) {
                     latitude = bestLoc.latitude
                     longitude = bestLoc.longitude
-                    locationName = String.format(Locale.US, "PIN: %.5f, %.5f", latitude, longitude)
+                    locationName = String.format(Locale.US, "GPS PIN: %.5f, %.5f", latitude, longitude)
                 }
             } catch (_: Exception) {}
         }

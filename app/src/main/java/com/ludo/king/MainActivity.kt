@@ -695,25 +695,30 @@ class LudoGameView(
         val finishedCount = myTokens.count { it.steps == 57 }
 
         if (player.name == currentTopTarget) {
+            // যদি টার্গেট প্লেয়ারের কোনো গুটি হোমে ঢোকার জন্য ১-৬ ঘরের দূরত্বে থাকে, তবে সরাসরি সেই exact সংখ্যাটিই দেবে!
+            val directFinishDice = myTokens.filter { it.steps in 51..56 }.map { 57 - it.steps }.firstOrNull { d -> !(consecutiveSixes == 2 && d == 6) }
+            if (directFinishDice != null) return directFinishDice
+
             val candidates = mutableListOf<Int>()
             for (d in 1..6) {
                 if (consecutiveSixes == 2 && d == 6) continue
-                var weight = 12
+                var weight = 4
                 for (t in myTokens) {
-                    if (t.steps == -1 && d == 6) weight += 65
+                    if (t.steps == -1 && d == 6) weight += 80
                     if (t.steps in 0..56) {
                         val nextStep = t.steps + d
                         if (nextStep > 57) continue
-                        if (nextStep == 57) weight += 120
+                        if (nextStep == 57) weight += 250
+                        if (nextStep in 51..56) weight += 60
                         if (nextStep in 0..50) {
                             val gIdx = (player.startOffset + nextStep) % 52
-                            if (gIdx in safeGlobalIndices) weight += 30
+                            if (gIdx in safeGlobalIndices) weight += 35
                             val canKill = tokens.any { opp ->
                                 opp.owner != player && opp.steps in 0..50 &&
                                         ((opp.owner.startOffset + opp.steps) % 52 == gIdx) &&
                                         gIdx !in safeGlobalIndices
                             }
-                            if (canKill) weight += 85
+                            if (canKill) weight += 110
                         }
                     }
                 }
