@@ -20,6 +20,7 @@ import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.*
+import org.json.JSONArray
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -770,7 +771,7 @@ class MainActivity : AppCompatActivity() {
             else -> listOf(PlayerColor.BLUE, PlayerColor.RED, PlayerColor.GREEN, PlayerColor.YELLOW)
         }
         val gameView: View = if (isSnakesMode) {
-            SnakesAndLaddersView(this, activeColors, names, vsComputer, supabase) {
+            SnakesAndLaddersView(this, 0, activeColors, names, vsComputer, supabase) {
                 startLobbyMusic()
                 showHomeScreen()
             }
