@@ -1376,7 +1376,7 @@ class LudoGameView(
         } else if (t.steps in 0..50) {
             val gIdx = (t.owner.startOffset + t.steps) % 52
             if (gIdx in safeGlobalIndices) {
-                SoundEngine.playSafeZone()
+                SoundEngine.playHomeOrSix()
                 syncProgressToRemote()
                 nextTurn(extraTurn)
                 invalidate()
