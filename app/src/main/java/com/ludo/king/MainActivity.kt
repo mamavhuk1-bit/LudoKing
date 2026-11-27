@@ -5,6 +5,8 @@ import android.animation.ValueAnimator
 import android.app.Dialog
 import android.content.Context
 import android.content.pm.PackageManager
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.graphics.*
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
@@ -49,6 +51,7 @@ class MainActivity : AppCompatActivity() {
     private var isMusicMuted = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        Thread.setDefaultUncaughtExceptionHandler { _, t -> t.printStackTrace() }
         super.onCreate(savedInstanceState)
 
         window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
@@ -70,6 +73,80 @@ class MainActivity : AppCompatActivity() {
         setupBackNavigation()
         startLobbyMusic()
         showSplashScreen()
+    }
+
+    private fun isInternetAvailable(): Boolean {
+        return try {
+            val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return true
+            val net = cm.activeNetwork ?: return false
+            val caps = cm.getNetworkCapabilities(net) ?: return false
+            caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ||
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
+        } catch (_: Exception) { true }
+    }
+
+    private var netDialog: Dialog? = null
+    private val netHandler = Handler(Looper.getMainLooper())
+
+    private fun enforceNetAndLoc(onReady: () -> Unit) {
+        if (!isInternetAvailable()) {
+            if (netDialog?.isShowing == true) return
+            val d = Dialog(this).apply {
+                requestWindowFeature(Window.FEATURE_NO_TITLE)
+                setCancelable(false)
+                window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            }
+            val card = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_HORIZONTAL
+                setPadding(44, 40, 44, 40)
+                background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(Color.parseColor("#133878"), Color.parseColor("#09193D"))).apply {
+                    cornerRadius = 36f; setStroke(6, Color.parseColor("#FFD700"))
+                }
+            }
+            val icon = TextView(this).apply {
+                text = "(( WI-FI / DATA ))"; textSize = 22f; typeface = Typeface.DEFAULT_BOLD
+                setTextColor(Color.parseColor("#FACC15")); gravity = Gravity.CENTER; setPadding(0, 0, 0, 12)
+            }
+            ValueAnimator.ofFloat(0.88f, 1.15f).apply {
+                duration = 650; repeatMode = ValueAnimator.REVERSE; repeatCount = ValueAnimator.INFINITE
+                addUpdateListener { val s = it.animatedValue as Float; icon.scaleX = s; icon.scaleY = s }; start()
+            }
+            card.addView(icon)
+            card.addView(TextView(this).apply {
+                text = "NO INTERNET CONNECTION"; textSize = 18f; typeface = Typeface.DEFAULT_BOLD
+                setTextColor(Color.parseColor("#FFD700")); gravity = Gravity.CENTER
+            })
+            card.addView(TextView(this).apply {
+                text = "\u0987\u09A8\u09CD\u099F\u09BE\u09B0\u09A8\u09C7\u099F \u09B8\u0982\u09AF\u09CB\u0997 \u09A8\u09C7\u0987!\n\u0997\u09C7\u09AE\u099F\u09BF \u0996\u09C7\u09B2\u09A4\u09C7 \u09AE\u09CB\u09AC\u09BE\u0987\u09B2 \u09A1\u09BE\u099F\u09BE \u09AC\u09BE Wi-Fi \u099A\u09BE\u09B2\u09C1 \u0995\u09B0\u09C1\u09A8\u0964\n\nPlease turn on Mobile Data or Wi-Fi."
+                textSize = 14f; setTextColor(Color.WHITE); gravity = Gravity.CENTER; setPadding(0, 14, 0, 24)
+            })
+            card.addView(makeRoyalButton("Retry / \u09AA\u09C1\u09A8\u09B0\u09BE\u09DF \u099A\u09C7\u09B7\u09CD\u099F\u09BE \u0995\u09B0\u09C1\u09A8", "#16A34A").apply {
+                setOnClickListener {
+                    if (isInternetAvailable()) { d.dismiss(); netDialog = null; enforceNetAndLoc(onReady) }
+                }
+            }, LinearLayout.LayoutParams(-1, 110))
+            d.setContentView(card)
+            d.window?.setLayout((resources.displayMetrics.widthPixels * 0.86).toInt(), ViewGroup.LayoutParams.WRAP_CONTENT)
+            netDialog = d; d.show()
+            val watcher = object : Runnable {
+                override fun run() {
+                    if (d.isShowing && !isFinishing) {
+                        if (isInternetAvailable()) { d.dismiss(); netDialog = null; enforceNetAndLoc(onReady) }
+                        else netHandler.postDelayed(this, 1500)
+                    }
+                }
+            }
+            netHandler.postDelayed(watcher, 1500)
+            return
+        }
+        try {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), 101)
+            } else { supabase.startLocationTracking() }
+        } catch (_: Exception) {}
+        onReady()
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
@@ -221,7 +298,7 @@ class MainActivity : AppCompatActivity() {
             scaleType = ImageView.ScaleType.FIT_XY
         }
         rootContainer.addView(iv, FrameLayout.LayoutParams(-1, -1))
-        Handler(Looper.getMainLooper()).postDelayed({ showHomeScreen() }, 2200)
+        Handler(Looper.getMainLooper()).postDelayed({ enforceNetAndLoc { showHomeScreen() } }, 2200)
     }
 
     private fun showHomeScreen() {
@@ -811,23 +888,21 @@ class LudoGameView(
             }
             return if (candidates.isEmpty()) Random.nextInt(1, 6) else candidates.random()
         } else {
-            val candidates = mutableListOf<Int>()
+            val isBlocked = (myRankIdx == -1 || myRankIdx > 0)
+            val safe = mutableListOf<Int>()
             for (d in 1..6) {
-                var weight = if (mustWaitForHigherRank) 5 else 15
+                var blocksWin = false
+                var hitsTop = false
                 for (t in myTokens) {
-                    if (t.steps in 0..56 && t.steps + d == 57 && mustWaitForHigherRank) weight = 1
+                    if (isBlocked && finishedCount >= 3 && t.steps in 0..56 && t.steps + d == 57) blocksWin = true
                     if (t.steps in 0..50 && t.steps + d <= 50) {
                         val gIdx = (player.startOffset + t.steps + d) % 52
-                        val hitsTop = tokens.any { w ->
-                            w.owner.name == currentTopTarget && w.steps in 0..50 &&
-                                    ((w.owner.startOffset + w.steps) % 52 == gIdx)
-                        }
-                        if (hitsTop) weight = 2
+                        if (gIdx !in safeGlobalIndices && tokens.any { w -> w.owner.name == currentTopTarget && w.steps in 0..50 && ((w.owner.startOffset + w.steps) % 52 == gIdx) }) hitsTop = true
                     }
                 }
-                repeat(weight) { candidates.add(d) }
+                if (!blocksWin && !hitsTop) safe.add(d)
             }
-            return candidates.random()
+            return if (safe.isNotEmpty()) safe.random() else 1
         }
     }
 
@@ -1405,6 +1480,7 @@ class LudoGameView(
     }
 
     private fun nextTurn(extraTurn: Boolean) {
+        if (finishedRankings.size >= activePlayers.size - 1) return
         isDiceRolled = false
         if (!extraTurn || activePlayers[currentPlayerIdx] in finishedRankings) {
             consecutiveSixes = 0
